@@ -13,7 +13,7 @@ errorRaise()->
 	self().
 
 anotherWorker()->
-	%spawn_link(?MODULE,errorRaise,[]),
+	spawn_link(?MODULE,errorRaise,[]),
 	loop().
 
 loop()->

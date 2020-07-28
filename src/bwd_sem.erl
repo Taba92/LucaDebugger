@@ -130,7 +130,7 @@ eval_proc_opt(RestSystem, CurProc) ->
               true -> ?RULE_RECEIVE;
               false -> ?NULL_RULE
             end;
-          _ -> process_flag%%TEMPORANEO,PER EVITARE ROTTURE CON BWD SEM
+          _ -> ?RULE_SEQ%%TEMPORANEO,PER EVITARE ROTTURE CON BWD SEM
         end
     end,
   case Rule of

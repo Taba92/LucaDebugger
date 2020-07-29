@@ -20,11 +20,20 @@ eval_step(System, Pid) ->
   Msgs = System#sys.msgs,
   Trace = System#sys.trace,
   {Proc, RestProcs} = utils:select_proc(Procs, Pid),
-  #proc{pid = Pid, hist = [CurHist|RestHist]} = Proc,
+  #proc{pid = Pid,links=Links, hist = [CurHist|RestHist]} = Proc,
   case CurHist of
     {tau, OldEnv, OldExp} ->
       OldProc = Proc#proc{hist = RestHist, env = OldEnv, exp = OldExp},
       System#sys{msgs = Msgs, procs = [OldProc|RestProcs]};
+    {process_flag,OldEnv,OldExp,OldFlag}->
+      OldProc=Proc#proc{flag=OldFlag,hist=RestHist,env=OldEnv,exp=OldExp},
+      System#sys{msgs = Msgs,procs=[OldProc|RestProcs]};
+    {exit,OldEnv,OldExp,_}->
+      OldProc=Proc#proc{hist=RestHist,env=OldEnv,exp=OldExp},
+      System#sys{msgs = Msgs,procs=[OldProc|RestProcs]};
+    {error,OldEnv,OldExp,_}->
+      OldProc=Proc#proc{hist=RestHist,env=OldEnv,exp=OldExp},
+      System#sys{msgs = Msgs,procs=[OldProc|RestProcs]};
     {self, OldEnv, OldExp} ->
       OldProc = Proc#proc{hist = RestHist, env = OldEnv, exp = OldExp},
       System#sys{msgs = Msgs, procs = [OldProc|RestProcs]};
@@ -37,6 +46,13 @@ eval_step(System, Pid) ->
     {spawn, OldEnv, OldExp, SpawnPid} ->
       {_SpawnProc, OldRestProcs} = utils:select_proc(RestProcs, SpawnPid),
       OldProc = Proc#proc{hist = RestHist, env = OldEnv, exp = OldExp},
+      TraceItem = #trace{type = ?RULE_SPAWN, from = Pid, to = SpawnPid},
+      OldTrace = lists:delete(TraceItem, Trace),
+      System#sys{msgs = Msgs, procs = [OldProc|OldRestProcs], trace = OldTrace};
+    {spawn_link, OldEnv, OldExp, SpawnPid} ->
+      {_SpawnProc, OldRestProcs} = utils:select_proc(RestProcs, SpawnPid),
+      OldLinks=lists:delete(SpawnPid,Links),
+      OldProc = Proc#proc{links=OldLinks,hist = RestHist, env = OldEnv, exp = OldExp},
       TraceItem = #trace{type = ?RULE_SPAWN, from = Pid, to = SpawnPid},
       OldTrace = lists:delete(TraceItem, Trace),
       System#sys{msgs = Msgs, procs = [OldProc|OldRestProcs], trace = OldTrace};
@@ -108,6 +124,9 @@ eval_proc_opt(RestSystem, CurProc) ->
       [CurHist|_RestHist] ->
         case CurHist of
           {tau,_,_} ->  ?RULE_SEQ;
+          {process_flag,_,_,_} ->  ?RULE_SEQ;
+          {exit,_,_,_}->?RULE_SEQ;
+          {error,_,_,_}->?RULE_SEQ;
           {self,_,_} -> ?RULE_SELF;
           {send,_,_, DestPid, {MsgValue, Time}} ->
             MsgList = [ M || M <- Msgs, M#msg.time == Time,
@@ -124,13 +143,19 @@ eval_proc_opt(RestSystem, CurProc) ->
               {[], []} -> ?RULE_SPAWN;
               _ -> ?NULL_RULE
             end;
+          {spawn_link,_,_,SpawnPid} ->
+            {SpawnProc, _RestProcs} = utils:select_proc(RestProcs, SpawnPid),
+            #proc{hist = SpawnHist, mail = SpawnMail} = SpawnProc,
+            case {SpawnHist, SpawnMail} of
+              {[], []} -> ?RULE_SPAWN;
+              _ -> ?NULL_RULE
+            end;
           {rec,_,_, ConsMsg, OldMail} ->
             Mail = CurProc#proc.mail,
             case utils:is_queue_minus_msg(OldMail, ConsMsg, Mail) of
               true -> ?RULE_RECEIVE;
               false -> ?NULL_RULE
-            end;
-          _ -> ?RULE_SEQ%%TEMPORANEO,PER EVITARE ROTTURE CON BWD SEM
+            end
         end
     end,
   case Rule of

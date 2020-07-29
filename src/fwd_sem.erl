@@ -353,13 +353,13 @@ eval_step(System, Pid) ->
   {Proc, RestProcs} = utils:select_proc(Procs, Pid),
   #proc{pid = Pid,flag=Flag,links=Links,hist = Hist,env = Env, exp = Exp, mail = Mail} = Proc,
   NewSystem=
-  case is_exp(Exp) of%%fine del codice
-      false->%%inizio a guardare i link del processo uscente/morente
+  case is_exp(Exp) of
+      false->%%fine codice o uscita anomala,inizio a guardare i link del processo uscente/morente
         NewProc=Proc#proc{links=[]},%"uccidi" il processo,rompendo tutti i link
         case cerl:concrete(Exp) of
-          {error,Reason,stack}->
+          {error,_,stack}->
               {NewProcs,NewMsgs}=utils:propag_error(RestProcs,Msgs,Links,Pid,Exp);%ottieni gli aggiornamenti
-          {exit,Reason}->
+          {exit,_}->
               {NewProcs,NewMsgs}=utils:propag_exit(RestProcs,Msgs,Links,Pid,Exp);
           _->%%terminazione normale del codice
             TermExp=cerl:abstract({exit,normal}),
@@ -641,6 +641,7 @@ eval_exp_opt(Exp, Env, Mail) ->
                     false ->
                       case {CallModule, CallName} of
                         {{c_literal, _, 'erlang'},{c_literal, _, 'spawn'}} -> #opt{rule = ?RULE_SPAWN};
+                        {{c_literal, _, 'erlang'},{c_literal, _, 'spawn_link'}} -> #opt{rule = ?RULE_SPAWN};
                         {{c_literal, _, 'erlang'},{c_literal, _, 'self'}} -> #opt{rule = ?RULE_SELF};
                         {{c_literal, _, 'erlang'},{c_literal, _, '!'}} -> #opt{rule = ?RULE_SEND};
                         _ -> #opt{rule = ?RULE_SEQ}

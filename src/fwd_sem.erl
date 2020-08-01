@@ -355,16 +355,16 @@ eval_step(System, Pid) ->
   NewSystem=
   case is_exp(Exp) of
       false->%%fine codice o uscita anomala,inizio a guardare i link del processo uscente/morente
-        NewProc=Proc#proc{links=[]},%"uccidi" il processo,rompendo tutti i link
         case cerl:concrete(Exp) of
           {error,_,stack}->
-              {NewProcs,NewMsgs}=utils:propag_error(RestProcs,Msgs,Links,Pid,Exp);%ottieni gli aggiornamenti
+              {NewProcs,HistVal,NewMsgs}=utils:propag_error(RestProcs,Msgs,Links,Pid,Exp);%ottieni gli aggiornamenti
           {exit,_}->
-              {NewProcs,NewMsgs}=utils:propag_exit(RestProcs,Msgs,Links,Pid,Exp);
+              {NewProcs,HistVal,NewMsgs}=utils:propag_exit(RestProcs,Msgs,Links,Pid,Exp);
           _->%%terminazione normale del codice
             TermExp=cerl:abstract({exit,normal}),
-            {NewProcs,NewMsgs}=utils:propag_exit(RestProcs,Msgs,Links,Pid,TermExp)
+            {NewProcs,HistVal,NewMsgs}=utils:propag_exit(RestProcs,Msgs,Links,Pid,TermExp)
         end,
+        NewProc=Proc#proc{links=[],hist=[{propag,Env,Exp,HistVal}|Hist]},%"uccidi" il processo,rompendo tutti i link
         System#sys{msgs=NewMsgs,procs=[NewProc|NewProcs]};
       true->
         {NewEnv, NewExp, Label} = eval_seq(Env,Flag,Exp),
@@ -557,7 +557,7 @@ eval_procs_opts(#sys{procs = [CurProc|RestProcs]}) ->
     ?NOT_EXP ->
       case cerl:type(Exp)==literal andalso Links/=[] of
         true->
-          [#opt{sem = ?MODULE, type = ?TYPE_PROC, id = cerl:concrete(Pid),rule=?RULE_SEQ}|eval_procs_opts(#sys{procs = RestProcs})];
+          [#opt{sem = ?MODULE, type = ?TYPE_PROC, id = cerl:concrete(Pid),rule=?RULE_PROPAG}|eval_procs_opts(#sys{procs = RestProcs})];
         false->
           eval_procs_opts(#sys{procs = RestProcs})%%sarebbe solo questa linea senza tutti i case!!!
       end;

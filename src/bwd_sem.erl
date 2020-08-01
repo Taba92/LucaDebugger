@@ -28,6 +28,14 @@ eval_step(System, Pid) ->
     {process_flag,OldEnv,OldExp,OldFlag}->
       OldProc=Proc#proc{flag=OldFlag,hist=RestHist,env=OldEnv,exp=OldExp},
       System#sys{msgs = Msgs,procs=[OldProc|RestProcs]};
+    {signal,OldEnv,OldExp,FromPid,undef}->
+        NewLinks=Links++[FromPid],
+        OldProc=Proc#proc{links=NewLinks,hist=RestHist,env=OldEnv,exp=OldExp},
+        {BrokenProc,OtherProcs}=utils:select_proc(RestProcs,FromPid),
+        #proc{pid =FromPid,links=BrokenLinks} = BrokenProc,
+        OldLinksBroken=BrokenLinks++[Pid],
+        OldBrokenProc=BrokenProc#proc{links=OldLinksBroken},
+        System#sys{msgs= Msgs ,procs = [OldBrokenProc|[OldProc|OtherProcs]]};
     {exit,OldEnv,OldExp,_}->
       OldProc=Proc#proc{hist=RestHist,env=OldEnv,exp=OldExp},
       System#sys{msgs = Msgs,procs=[OldProc|RestProcs]};
@@ -116,6 +124,7 @@ eval_procs_opts(System) ->
 eval_proc_opt(RestSystem, CurProc) ->
   RestProcs = RestSystem#sys.procs,
   Msgs = RestSystem#sys.msgs,
+  Links=CurProc#proc.links,
   Hist = CurProc#proc.hist,
   Rule =
     case Hist of
@@ -127,6 +136,12 @@ eval_proc_opt(RestSystem, CurProc) ->
           {process_flag,_,_,_} ->  ?RULE_SEQ;
           {exit,_,_,_}->?RULE_SEQ;
           {error,_,_,_}->?RULE_SEQ;
+          {signal,_,_,_}->?NULL_RULE;
+          {propag,_,_,OldLinks}->
+             case utils:checkBackPropag(RestProcs,Msgs,OldLinks) of
+                true->?RULE_PROPAG;
+               false->?NULL_RULE
+              end;
           {self,_,_} -> ?RULE_SELF;
           {send,_,_, DestPid, {MsgValue, Time}} ->
             MsgList = [ M || M <- Msgs, M#msg.time == Time,

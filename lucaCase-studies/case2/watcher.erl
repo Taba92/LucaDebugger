@@ -1,23 +1,23 @@
 -module(watcher).
--export([main/0,errorRaise/0,anotherWorker/0]).
+-export([main/0,errorRaise/0,anotherWorker/0,loop/0]).
 
 main()->
 	process_flag(trap_exit,true),
-	spawn_link(?MODULE,anotherWorker,[]),
+	spawn_link(?MODULE,errorRaise,[]),
 	startSupervision().
 
 errorRaise()->
-	3/1,
-	exit(normal),
+	spawn_link(?MODULE,anotherWorker,[]),
+	3/0,
 	self(),
 	self().
 
 anotherWorker()->
-	spawn_link(?MODULE,errorRaise,[]),
-	loop().
+	spawn_link(?MODULE,loop,[]),
+	4/2.
 
 loop()->
-	4/2.
+	5/3.
 
 startSupervision()->
 	receive

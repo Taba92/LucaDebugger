@@ -17,6 +17,7 @@
 -define(TYPE_PROC, proc).
 
 -define(RULE_SEQ,      seq).
+-define(RULE_PROPAG,   propag).
 -define(RULE_CHECK,    check).
 -define(RULE_SEND,     send).
 -define(RULE_RECEIVE, 'receive').

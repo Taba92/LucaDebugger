@@ -4,7 +4,7 @@
 %%%-------------------------------------------------------------------
 
 -module(utils).
--export([propag_error/5,propag_exit/5,fundef_lookup/2, fundef_rename/1, substitute/2,
+-export([checkBackPropag/3,propag_error/5,propag_exit/5,fundef_lookup/2, fundef_rename/1, substitute/2,
          build_var/1, build_var/2, pid_exists/2,
          select_proc/2, select_msg/2,select_linked_procs/2,
          select_proc_with_time/2, select_proc_with_send/2,
@@ -122,54 +122,73 @@ pid_exists(Procs, Pid) ->
   end.
 
 %%aggiunte luca
+checkBackPropag(_,_,[])->true;
+checkBackPropag(RestProcs,Msgs,[CurLink|RestLinks])->
+  checkBackProc(RestProcs,Msgs,CurLink) and checkBackPropag(RestProcs,Msgs,RestLinks).
+
+checkBackProc(_,Msgs,{LinkPid,MsgValue,Time})->
+    Msg = #msg{dest = LinkPid, val = MsgValue, time = Time},
+    lists:member(Msg,Msgs);
+checkBackProc(RestProcs,_,{LinkPid,_})->
+      {LinkProc,_}=select_proc(RestProcs,LinkPid),
+      [CurHist|_]=LinkProc#proc.hist,
+      case CurHist of
+        {signal,_,_,_}->true;
+        {propag,_,_,_}->false
+      end.
+
 propag_error(RestProcs,Msgs,Links,Pid,NewExp)->
     {error,Reason,stack}=cerl:concrete(NewExp),
     {LinkedProcs,NotLinkedProcs}=select_linked_procs(RestProcs,Links),
-    A=fun(LinkedProc,AccTuple)->
-            LinkedProcLinks=LinkedProc#proc.links,
-            case cerl:concrete(LinkedProc#proc.flag) of
-              true->
-                Time = ref_lookup(?FRESH_TIME),
-                ref_add(?FRESH_TIME, Time + 1),
-                MsgValue=cerl:abstract({'EXIT',cerl:concrete(Pid),Reason}),
-                NewMsg = #msg{dest = LinkedProc#proc.pid, val = MsgValue, time = Time},
-                NewLinkedProc=LinkedProc#proc{links=lists:delete(Pid,LinkedProcLinks)},
-                {[NewLinkedProc|element(1,AccTuple)],[NewMsg|element(2,AccTuple)]};
-              _->
-                NewLinkedProc=LinkedProc#proc{links=lists:delete(Pid,LinkedProcLinks),exp=NewExp},
-                {[NewLinkedProc|element(1,AccTuple)],element(2,AccTuple)}
-            end
-          end,
-    lists:foldl(A,{NotLinkedProcs,Msgs},LinkedProcs).
+    A=fun(LinkedProc,{Procs,HistList,Messages})->
+        #proc{pid =LinkPid,flag=Flag,links=LinkedProcLinks,hist=Hist,env=Env,exp=Exp}=LinkedProc, 
+        NewLinks=lists:delete(Pid,LinkedProcLinks),
+        case cerl:concrete(Flag) of
+          true->
+            Time = ref_lookup(?FRESH_TIME),
+            ref_add(?FRESH_TIME, Time + 1),
+            MsgValue=cerl:abstract({'EXIT',cerl:concrete(Pid),Reason}),
+            NewMsg = #msg{dest = LinkPid, val = MsgValue, time = Time},
+            NewLinkedProc=LinkedProc#proc{links=NewLinks},
+            HistVal={LinkPid,MsgValue,Time},
+            {[NewLinkedProc|Procs],[HistVal|HistList],[NewMsg|Messages]};
+           _->
+            NewHist=[{signal,Env,Exp,Pid}|Hist],
+            NewLinkedProc=LinkedProc#proc{links=NewLinks,hist=NewHist,exp=NewExp},
+            HistVal={LinkPid,Flag},
+            {[NewLinkedProc|Procs],[HistVal|HistList],Messages}
+        end
+      end,
+    lists:foldl(A,{NotLinkedProcs,[],Msgs},LinkedProcs).
 
 propag_exit(RestProcs,Msgs,Links,Pid,NewExp)->
-      %funzionale che,in base al flag del linkato,
-      %se il flag è true=> rompi il link del linkato,e crea un nuovo messaggio
-      %altrimenti => rompi il link(?) e "uccidi" il linkato(cambia exp con reason)
-      %inoltre aggiorna l'accumulatore composto da processi non linkati e messaggi globali
       {exit,Reason}=cerl:concrete(NewExp),
       {LinkedProcs,NotLinkedProcs}=select_linked_procs(RestProcs,Links),
-     A=fun(LinkedProc,AccTuple)->
-            LinkedProcLinks=LinkedProc#proc.links,
-            case cerl:concrete(LinkedProc#proc.flag) of
+     A=fun(LinkedProc,{Procs,HistList,Messages})->
+            #proc{pid =LinkPid,flag=Flag,links=LinkedProcLinks}=LinkedProc,
+            NewLinks=lists:delete(Pid,LinkedProcLinks), 
+            case cerl:concrete(Flag) of
               true->
                 Time = ref_lookup(?FRESH_TIME),
                 ref_add(?FRESH_TIME, Time + 1),
                 MsgValue=cerl:abstract({'EXIT',cerl:concrete(Pid),Reason}),
                 NewMsg = #msg{dest = LinkedProc#proc.pid, val = MsgValue, time = Time},
-                NewLinkedProc=LinkedProc#proc{links=lists:delete(Pid,LinkedProcLinks)},
-                {[NewLinkedProc|element(1,AccTuple)],[NewMsg|element(2,AccTuple)]};
+                NewLinkedProc=LinkedProc#proc{links=NewLinks},
+                HistVal={LinkPid,Flag,Time},
+                {[NewLinkedProc|Procs],[HistVal|HistList],[NewMsg|Messages]};
               _->
                 case Reason of
                   normal->
-                    NewLinkedProc=LinkedProc#proc{links=lists:delete(Pid,LinkedProcLinks)};
+                    NewLinkedProc=LinkedProc#proc{links=NewLinks},
+                     {[NewLinkedProc|Procs],HistList,Msgs};
                   _->
-                    NewLinkedProc=LinkedProc#proc{links=lists:delete(Pid,LinkedProcLinks),exp=NewExp}
-                end,
-                {[NewLinkedProc|element(1,AccTuple)],element(2,AccTuple)}
+                    NewLinkedProc=LinkedProc#proc{links=NewLinks,exp=NewExp},
+                    HistVal={LinkPid,Flag},
+                    {[NewLinkedProc|Procs],[HistVal|HistList],Msgs}
+                end
             end
           end,
-    lists:foldl(A,{NotLinkedProcs,Msgs},LinkedProcs).
+    lists:foldl(A,{NotLinkedProcs,[],Msgs},LinkedProcs).
 
 select_linked_procs(Procs,Links)->
   %%funzionale che smista i processi linkati con quello attuale e non

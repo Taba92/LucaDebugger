@@ -30,6 +30,7 @@ is_app_running() ->
 get_label_from_option(Option) ->
   case Option of
     #opt{rule = ?RULE_SEQ}     -> "Seq";
+    #opt{rule = ?RULE_PROPAG}   -> "Propag";
     #opt{rule = ?RULE_SEND}    -> "Send";
     #opt{rule = ?RULE_RECEIVE} -> "Receive";
     #opt{rule = ?RULE_SPAWN}   -> "Spawn";
@@ -41,6 +42,7 @@ get_rule_from_button(Button) ->
   Label = wxButton:getLabel(ref_lookup(Button)),
   case Label of
      "Seq"     -> ?RULE_SEQ;
+     "Propag"  -> ?RULE_PROPAG;
      "Send"    -> ?RULE_SEND;
      "Receive" -> ?RULE_RECEIVE;
      "Spawn"   -> ?RULE_SPAWN;

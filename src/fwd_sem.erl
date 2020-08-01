@@ -355,14 +355,20 @@ eval_step(System, Pid) ->
   NewSystem=
   case is_exp(Exp) of
       false->%%fine codice o uscita anomala,inizio a guardare i link del processo uscente/morente
+        {LinkedProcs,NotLinkedProcs}=utils:select_linked_procs(RestProcs,Links),
         case cerl:concrete(Exp) of
           {error,_,stack}->
-              {NewProcs,HistVal,NewMsgs}=utils:propag_error(RestProcs,Msgs,Links,Pid,Exp);%ottieni gli aggiornamenti
-          {exit,_}->
-              {NewProcs,HistVal,NewMsgs}=utils:propag_exit(RestProcs,Msgs,Links,Pid,Exp);
+            Acc={NotLinkedProcs,[],Msgs,Pid,Exp},
+            {NewProcs,HistVal,NewMsgs,_,_}=lists:foldl(fun utils:fwd_propag_err/2,Acc,LinkedProcs);
+          {exit,Reason}when Reason/=normal->
+            Acc={NotLinkedProcs,[],Msgs,Pid,Exp},
+            {NewProcs,HistVal,NewMsgs,_,_}=lists:foldl(fun utils:fwd_propag_err/2,Acc,LinkedProcs);
+          {exit,normal}->
+            Acc={NotLinkedProcs,[],Msgs,Pid},
+            {NewProcs,HistVal,NewMsgs,_}=lists:foldl(fun utils:fwd_propag_normal/2,Acc,LinkedProcs);
           _->%%terminazione normale del codice
-            TermExp=cerl:abstract({exit,normal}),
-            {NewProcs,HistVal,NewMsgs}=utils:propag_exit(RestProcs,Msgs,Links,Pid,TermExp)
+            Acc={NotLinkedProcs,[],Msgs,Pid},
+            {NewProcs,HistVal,NewMsgs,_}=lists:foldl(fun utils:fwd_propag_normal/2,Acc,LinkedProcs)
         end,
         NewProc=Proc#proc{links=[],hist=[{propag,Env,Exp,Mail,HistVal}|Hist]},%"uccidi" il processo,rompendo tutti i link
         System#sys{msgs=NewMsgs,procs=[NewProc|NewProcs]};

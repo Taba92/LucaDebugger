@@ -31,8 +31,8 @@ eval_step(System, Pid) ->
     {propag,OldEnv,OldExp,OldMail,Signals}->
       OldLinks=[element(1,Signal)||Signal<-Signals],
       {OldLinkedProcs,OldNotLinkedProcs}=utils:select_linked_procs(RestProcs,OldLinks),
-      Acc={OldNotLinkedProcs,OldLinkedProcs,Msgs},
-      {OldProcs,_,OldMsgs}=lists:foldl(fun utils:backPropagStep/2,Acc,Signals),
+      Acc={OldNotLinkedProcs,OldLinkedProcs,Msgs,Pid},
+      {OldProcs,_,OldMsgs,_}=lists:foldl(fun utils:backPropagStep/2,Acc,Signals),
       OldProc=Proc#proc{links=OldLinks,hist=RestHist,env=OldEnv,exp=OldExp,mail=OldMail},
       System#sys{msgs=OldMsgs,procs=[OldProc|OldProcs]};
     {exit,OldEnv,OldExp,_}->
@@ -134,9 +134,9 @@ eval_proc_opt(RestSystem, CurProc) ->
           {process_flag,_,_,_} ->  ?RULE_SEQ;
           {exit,_,_,_}->?RULE_SEQ;
           {error,_,_,_}->?RULE_SEQ;
-          {signal,_,_,_,_}->?NULL_RULE;
-          {propag,_,_,_,OldLinks}->
-             case utils:checkBackPropag(RestProcs,Msgs,OldLinks) of
+          {signal,_,_,_}->?NULL_RULE;
+          {propag,_,_,_,Signals}->
+             case utils:checkBackPropag(RestProcs,Msgs,Signals) of
                 true->?RULE_PROPAG;
                false->?NULL_RULE
               end;

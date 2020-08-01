@@ -4,7 +4,7 @@
 %%%-------------------------------------------------------------------
 
 -module(utils).
--export([checkBackPropag/3,propag_error/5,propag_exit/5,fundef_lookup/2, fundef_rename/1, substitute/2,
+-export([backPropagStep/2,checkBackPropag/3,propag_error/5,propag_exit/5,fundef_lookup/2, fundef_rename/1, substitute/2,
          build_var/1, build_var/2, pid_exists/2,
          select_proc/2, select_msg/2,select_linked_procs/2,
          select_proc_with_time/2, select_proc_with_send/2,
@@ -122,26 +122,42 @@ pid_exists(Procs, Pid) ->
   end.
 
 %%aggiunte luca
+
+backPropagStep({LinkPid,_},{OldNotLinked,OldLinked,Msgs})->
+  {CurProc,_}=select_proc(OldLinked,LinkPid),
+  #proc{links=Links,hist=[CurHist|RestHist]}=CurProc,
+  {signal,OldEnv,OldExp,OldMail,FromPid}=CurHist,
+  OldProc=#proc{pid=LinkPid,links=[FromPid|Links],hist=RestHist,env=OldEnv,exp=OldExp,mail=OldMail},
+  {[OldProc|OldNotLinked],OldLinked,Msgs};
+backPropagStep({LinkPid,MsgValue,Time},{OldNotLinked,OldLinked,Msgs})->
+  {_,Pid,_}=cerl:concrete(MsgValue),
+  FromPid=cerl:abstract(Pid),
+  {CurProc,_}=select_proc(OldLinked,LinkPid),
+  {_,OldMsgs}=select_msg(Msgs,Time),
+  #proc{links=Links}=CurProc,
+  OldProc=CurProc#proc{links=[FromPid|Links]},
+  {[OldProc|OldNotLinked],OldLinked,OldMsgs}.
+
 checkBackPropag(_,_,[])->true;
 checkBackPropag(RestProcs,Msgs,[CurLink|RestLinks])->
   checkBackProc(RestProcs,Msgs,CurLink) and checkBackPropag(RestProcs,Msgs,RestLinks).
 
-checkBackProc(_,Msgs,{LinkPid,MsgValue,Time})->
+checkBackProc(_,Msgs,{LinkPid,MsgValue,Time})->%%se era in trap_exit true
     Msg = #msg{dest = LinkPid, val = MsgValue, time = Time},
     lists:member(Msg,Msgs);
-checkBackProc(RestProcs,_,{LinkPid,_})->
+checkBackProc(RestProcs,_,{LinkPid,_})->%se era in trap_exit false
       {LinkProc,_}=select_proc(RestProcs,LinkPid),
       [CurHist|_]=LinkProc#proc.hist,
       case CurHist of
-        {signal,_,_,_}->true;
-        {propag,_,_,_}->false
+        {signal,_,_,_,_}->true;
+        {propag,_,_,_,_}->false
       end.
 
 propag_error(RestProcs,Msgs,Links,Pid,NewExp)->
     {error,Reason,stack}=cerl:concrete(NewExp),
     {LinkedProcs,NotLinkedProcs}=select_linked_procs(RestProcs,Links),
     A=fun(LinkedProc,{Procs,HistList,Messages})->
-        #proc{pid =LinkPid,flag=Flag,links=LinkedProcLinks,hist=Hist,env=Env,exp=Exp}=LinkedProc, 
+        #proc{pid =LinkPid,flag=Flag,links=LinkedProcLinks,hist=Hist,env=Env,exp=Exp,mail=Mail}=LinkedProc, 
         NewLinks=lists:delete(Pid,LinkedProcLinks),
         case cerl:concrete(Flag) of
           true->
@@ -153,7 +169,7 @@ propag_error(RestProcs,Msgs,Links,Pid,NewExp)->
             HistVal={LinkPid,MsgValue,Time},
             {[NewLinkedProc|Procs],[HistVal|HistList],[NewMsg|Messages]};
            _->
-            NewHist=[{signal,Env,Exp,Pid}|Hist],
+            NewHist=[{signal,Env,Exp,Mail,Pid}|Hist],
             NewLinkedProc=LinkedProc#proc{links=NewLinks,hist=NewHist,exp=NewExp},
             HistVal={LinkPid,Flag},
             {[NewLinkedProc|Procs],[HistVal|HistList],Messages}
@@ -174,7 +190,7 @@ propag_exit(RestProcs,Msgs,Links,Pid,NewExp)->
                 MsgValue=cerl:abstract({'EXIT',cerl:concrete(Pid),Reason}),
                 NewMsg = #msg{dest = LinkedProc#proc.pid, val = MsgValue, time = Time},
                 NewLinkedProc=LinkedProc#proc{links=NewLinks},
-                HistVal={LinkPid,Flag,Time},
+                HistVal={LinkPid,MsgValue,Time},
                 {[NewLinkedProc|Procs],[HistVal|HistList],[NewMsg|Messages]};
               _->
                 case Reason of

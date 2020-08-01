@@ -17,6 +17,7 @@ anotherWorker()->
 	4/2.
 
 loop()->
+	process_flag(trap_exit,true),
 	5/3.
 
 startSupervision()->

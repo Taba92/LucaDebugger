@@ -364,7 +364,7 @@ eval_step(System, Pid) ->
             TermExp=cerl:abstract({exit,normal}),
             {NewProcs,HistVal,NewMsgs}=utils:propag_exit(RestProcs,Msgs,Links,Pid,TermExp)
         end,
-        NewProc=Proc#proc{links=[],hist=[{propag,Env,Exp,HistVal}|Hist]},%"uccidi" il processo,rompendo tutti i link
+        NewProc=Proc#proc{links=[],hist=[{propag,Env,Exp,Mail,HistVal}|Hist]},%"uccidi" il processo,rompendo tutti i link
         System#sys{msgs=NewMsgs,procs=[NewProc|NewProcs]};
       true->
         {NewEnv, NewExp, Label} = eval_seq(Env,Flag,Exp),

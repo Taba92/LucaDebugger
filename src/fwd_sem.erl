@@ -354,7 +354,7 @@ eval_step(System, Pid) ->
   #proc{pid = Pid,flag=Flag,links=Links,hist = Hist,env = Env, exp = Exp, mail = Mail} = Proc,
   NewSystem=
   case is_exp(Exp) of
-      false->%%fine codice o uscita anomala,inizio a guardare i link del processo uscente/morente
+      false->%%fine codice o uscita anomala,inizio a guardare i link del processo morente
         {LinkedProcs,NotLinkedProcs}=utils:select_linked_procs(RestProcs,Links),
         case cerl:concrete(Exp) of
           {error,_,stack}->
@@ -374,7 +374,6 @@ eval_step(System, Pid) ->
         System#sys{msgs=NewMsgs,procs=[NewProc|NewProcs]};
       true->
         {NewEnv, NewExp, Label} = eval_seq(Env,Flag,Exp),
-  %NewSystem = 
         case Label of
         tau ->
           NewProc = Proc#proc{hist = [{tau,Env,Exp}|Hist], env = NewEnv, exp = NewExp},

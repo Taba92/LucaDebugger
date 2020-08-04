@@ -3,9 +3,8 @@
 
 main()->
 	process_flag(trap_exit,true),
+	spawn_link(?MODULE,child,[true]),
 	spawn_link(?MODULE,child,[false]),
-	spawn_link(?MODULE,child,[false]),
-	exit(normal),
 	%spawn_link(?MODULE,child,[false]),
 	%spawn_link(?MODULE,child,[true]),
 	startSupervision().

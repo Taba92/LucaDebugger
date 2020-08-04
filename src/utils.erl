@@ -4,7 +4,7 @@
 %%%-------------------------------------------------------------------
 
 -module(utils).
--export([fwd_propag_normal/2,fwd_propag_err/2,backPropagStep/2,checkBackPropag/3,
+-export([fwd_propag_normal/2,fwd_propag_err/2,backPropagStep/2,checkBackPropag/2,
           fundef_lookup/2, fundef_rename/1, substitute/2,
          build_var/1, build_var/2, pid_exists/2,
          select_proc/2, select_msg/2,select_linked_procs/2,
@@ -144,23 +144,21 @@ backPropagStep({LinkPid,_,Time},{OldNotLinked,OldLinked,Msgs,Pid})->
   {[OldProc|OldNotLinked],OldLinked,OldMsgs,Pid}.
 %%
 
-%%In case of  propagation,check if a process can rollback the propagation
-checkBackPropag(_,_,[])->true;
-checkBackPropag(RestProcs,Msgs,[CurLink|RestLinks])->
-  checkBackProc(RestProcs,Msgs,CurLink) and checkBackPropag(RestProcs,Msgs,RestLinks).
+%%In case of  propagation,check if a process can rollback its propagation
 
-checkBackProc(_,Msgs,{LinkPid,MsgValue,Time})->%%se era in trap_exit true(è uguale sia per sgnale errore che normale)
+checkBackPropag({LinkPid,MsgValue,Time},{RestProcs,Msgs,Bool})->%%se era in trap_exit true(è uguale sia per sgnale errore che normale)
     Msg = #msg{dest = LinkPid, val = MsgValue, time = Time},
-    lists:member(Msg,Msgs);
-checkBackProc(_,_,{_,normal})->%se era in trap_exit false è un normal exit
-  true;
-checkBackProc(RestProcs,_,{LinkPid,error})->%se era in trap_exit false è un segnale di errore
+    {RestProcs,Msgs,Bool and lists:member(Msg,Msgs)};
+checkBackPropag({_,normal},{RestProcs,Msgs,Bool})->%se era in trap_exit false ed è un normal exit
+  {RestProcs,Msgs,Bool and true};
+checkBackPropag({LinkPid,error},{RestProcs,Msgs,Bool})->%se era in trap_exit false ed è un segnale di errore
       {LinkProc,_}=select_proc(RestProcs,LinkPid),
       [CurHist|_]=LinkProc#proc.hist,
       case CurHist of
-        {signal,_,_,_}->true;
-        {propag,_,_,_,_}->false
-      end.
+        {signal,_,_,_}->Val=true;
+        {propag,_,_,_,_}->Val=false
+      end,
+      {RestProcs,Msgs,Bool and Val}.
 %%%
 
 fwd_propag_err(LinkedProc,{Procs,HistList,Msgs,Pid,NewExp})->

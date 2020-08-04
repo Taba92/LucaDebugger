@@ -136,10 +136,12 @@ eval_proc_opt(RestSystem, CurProc) ->
           {error,_,_,_}->?RULE_SEQ;
           {signal,_,_,_}->?NULL_RULE;
           {propag,_,_,_,Signals}->
-             case utils:checkBackPropag(RestProcs,Msgs,Signals) of
-                true->?RULE_PROPAG;
-               false->?NULL_RULE
-              end;
+            Acc={RestProcs,Msgs,true},
+            {_,_,Bool}=lists:foldl(fun utils:checkBackPropag/2,Acc,Signals),
+            case Bool of
+              true->?RULE_PROPAG;
+              false->?NULL_RULE
+            end;
           {self,_,_} -> ?RULE_SELF;
           {send,_,_, DestPid, {MsgValue, Time}} ->
             MsgList = [ M || M <- Msgs, M#msg.time == Time,

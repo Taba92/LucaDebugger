@@ -134,7 +134,7 @@ eval_proc_opt(RestSystem, CurProc) ->
           {process_flag,_,_,_} ->  ?RULE_SEQ;
           {exit,_,_,_}->?RULE_SEQ;
           {error,_,_,_}->?RULE_SEQ;
-          {signal,_,_,_}->?NULL_RULE;
+          {signal,_,_,_,_}->?NULL_RULE;
           {propag,_,_,_,Signals}->
             Acc={RestProcs,Msgs,true},
             {_,_,Bool}=lists:foldl(fun utils:checkBackPropag/2,Acc,Signals),

@@ -128,7 +128,7 @@ pid_exists(Procs, Pid) ->
 backPropagStep({LinkPid,error},{OldNotLinked,OldLinked,Msgs,Pid})->
   {CurProc,_}=select_proc(OldLinked,LinkPid),
   #proc{links=Links,hist=[CurHist|RestHist]}=CurProc,
-  {signal,OldEnv,OldExp,OldMail}=CurHist,
+  {signal,OldEnv,OldExp,OldMail,_}=CurHist,
   OldProc=#proc{pid=LinkPid,links=[Pid|Links],hist=RestHist,env=OldEnv,exp=OldExp,mail=OldMail},
   {[OldProc|OldNotLinked],OldLinked,Msgs,Pid};
 backPropagStep({LinkPid,normal},{OldNotLinked,OldLinked,Msgs,Pid})->
@@ -155,7 +155,7 @@ checkBackPropag({LinkPid,error},{RestProcs,Msgs,Bool})->%se era in trap_exit fal
       {LinkProc,_}=select_proc(RestProcs,LinkPid),
       [CurHist|_]=LinkProc#proc.hist,
       case CurHist of
-        {signal,_,_,_}->Val=true;
+        {signal,_,_,_,_}->Val=true;
         {propag,_,_,_,_}->Val=false
       end,
       {RestProcs,Msgs,Bool and Val}.
@@ -175,7 +175,7 @@ fwd_propag_err(LinkedProc,{Procs,HistList,Msgs,Pid,NewExp})->
         HistVal={LinkPid,MsgValue,Time},
         {[NewLinkedProc|Procs],[HistVal|HistList],[NewMsg|Msgs],Pid,NewExp};
       _->
-        NewHist=[{signal,Env,Exp,Mail}|Hist],
+        NewHist=[{signal,Env,Exp,Mail,Pid}|Hist],
         NewLinkedProc=LinkedProc#proc{links=NewLinks,hist=NewHist,exp=NewExp},
         HistVal={LinkPid,error},
         {[NewLinkedProc|Procs],[HistVal|HistList],Msgs,Pid,NewExp}
@@ -457,6 +457,10 @@ pp_pair(Var,Val) ->
 is_conc_item({spawn,_,_,_}) -> true;
 is_conc_item({send,_,_,_,_}) -> true;
 is_conc_item({rec,_,_,_,_}) -> true;
+is_conc_item({spawn_link,_,_,_}) -> true;
+is_conc_item({process_flag,_,_,_}) -> true;
+is_conc_item({propag,_,_,_,_}) -> true;
+is_conc_item({signal,_,_,_,_}) -> true;
 is_conc_item(_) -> false.
 
 pp_hist(Hist, Opts) ->
@@ -483,7 +487,21 @@ pp_hist_2({spawn,_,_,Pid}) ->
 pp_hist_2({send,_,_,_,{Value,Time}}) ->
   "send(" ++ pp(Value) ++ "," ++ [{?wxRED, integer_to_list(Time)}] ++ ")";
 pp_hist_2({rec,_,_,{Value,Time},_}) ->
-  "rec(" ++ pp(Value) ++ "," ++ [{?wxBLUE, integer_to_list(Time)}] ++ ")".
+  "rec(" ++ pp(Value) ++ "," ++ [{?wxBLUE, integer_to_list(Time)}] ++ ")";
+pp_hist_2({spawn_link,_,_,Pid}) ->
+  "spawn_link(" ++ [{?CAUDER_GREEN, pp(Pid)}] ++ ")";
+pp_hist_2({process_flag,_,_,Flag}) ->
+  "p_flag(" ++ [{?CAUDER_GREEN, pp(Flag)}] ++ ")";
+pp_hist_2({propag,_,_,_,HistVal}) ->
+  String=lists:foldl(fun stringify/2,"",HistVal),
+  [[],LinksString]=string:split(String,","),
+  "propag(" ++ [{?CAUDER_GREEN, LinksString}] ++ ")";
+pp_hist_2({signal,_,_,_,FromPid}) ->
+  "signal(" ++ [{?CAUDER_GREEN, pp(FromPid)}] ++ ")".
+
+stringify(HistLink,Acc)->
+  PidString=pp(element(1,HistLink)),
+  Acc++","++PidString.
 
 pp_mail(Mail, Opts) ->
   case proplists:get_value(?PRINT_MAIL, Opts) of

@@ -20,21 +20,25 @@ eval_step(System, Pid) ->
   Msgs = System#sys.msgs,
   Trace = System#sys.trace,
   {Proc, RestProcs} = utils:select_proc(Procs, Pid),
-  #proc{pid = Pid,links=Links,hist = [CurHist|RestHist]} = Proc,
+  #proc{pid = Pid,flag=Flag,links=Links,hist = [CurHist|RestHist]} = Proc,
   case CurHist of
     {tau, OldEnv, OldExp} ->
       OldProc = Proc#proc{hist = RestHist, env = OldEnv, exp = OldExp},
       System#sys{msgs = Msgs, procs = [OldProc|RestProcs]};
     {process_flag,OldEnv,OldExp,OldFlag}->
       OldProc=Proc#proc{flag=OldFlag,hist=RestHist,env=OldEnv,exp=OldExp},
-      System#sys{msgs = Msgs,procs=[OldProc|RestProcs]};
+      TraceItem = #trace{type = ?RULE_PROCESS_FLAG,from = Pid,val=Flag},
+      OldTrace = lists:delete(TraceItem, Trace),
+      System#sys{msgs = Msgs,procs=[OldProc|RestProcs],trace=OldTrace};
     {propag,OldEnv,OldExp,OldMail,Signals}->
       OldLinks=[element(1,Signal)||Signal<-Signals],
       {OldLinkedProcs,OldNotLinkedProcs}=utils:select_linked_procs(RestProcs,OldLinks),
       Acc={OldNotLinkedProcs,OldLinkedProcs,Msgs,Pid},
       {OldProcs,_,OldMsgs,_}=lists:foldl(fun utils:backPropagStep/2,Acc,Signals),
       OldProc=Proc#proc{links=OldLinks,hist=RestHist,env=OldEnv,exp=OldExp,mail=OldMail},
-      System#sys{msgs=OldMsgs,procs=[OldProc|OldProcs]};
+      TraceItem = #trace{type = ?RULE_PROPAG,from = Pid,to =OldLinks},
+      OldTrace = lists:delete(TraceItem, Trace),
+      System#sys{msgs=OldMsgs,procs=[OldProc|OldProcs],trace=OldTrace};
     {exit,OldEnv,OldExp,_}->
       OldProc=Proc#proc{hist=RestHist,env=OldEnv,exp=OldExp},
       System#sys{msgs = Msgs,procs=[OldProc|RestProcs]};
@@ -60,7 +64,7 @@ eval_step(System, Pid) ->
       {_SpawnProc, OldRestProcs} = utils:select_proc(RestProcs, SpawnPid),
       OldLinks=lists:delete(SpawnPid,Links),
       OldProc = Proc#proc{links=OldLinks,hist = RestHist, env = OldEnv, exp = OldExp},
-      TraceItem = #trace{type = ?RULE_SPAWN, from = Pid, to = SpawnPid},
+      TraceItem = #trace{type = ?RULE_SPAWN_LINK, from = Pid, to = SpawnPid},
       OldTrace = lists:delete(TraceItem, Trace),
       System#sys{msgs = Msgs, procs = [OldProc|OldRestProcs], trace = OldTrace};
     {rec, OldEnv, OldExp, OldMsg, OldMail} ->

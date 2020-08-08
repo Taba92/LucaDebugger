@@ -8,8 +8,7 @@ main()->
 
 errorRaise()->
 	spawn_link(?MODULE,anotherWorker,[]),
-	%3/0,
-	exit(normal),
+	3/0,
 	self(),
 	self().
 

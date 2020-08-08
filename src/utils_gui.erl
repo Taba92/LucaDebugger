@@ -31,9 +31,11 @@ get_label_from_option(Option) ->
   case Option of
     #opt{rule = ?RULE_SEQ}     -> "Seq";
     #opt{rule = ?RULE_PROPAG}   -> "Propag";
+    #opt{rule = ?RULE_PROCESS_FLAG}   -> "Flag";
     #opt{rule = ?RULE_SEND}    -> "Send";
     #opt{rule = ?RULE_RECEIVE} -> "Receive";
     #opt{rule = ?RULE_SPAWN}   -> "Spawn";
+    #opt{rule = ?RULE_SPAWN_LINK}   -> "SpawnLink";
     #opt{rule = ?RULE_SELF}    -> "Self";
     #opt{rule = ?RULE_SCHED}   -> ?NULL_LABEL
   end.
@@ -43,9 +45,11 @@ get_rule_from_button(Button) ->
   case Label of
      "Seq"     -> ?RULE_SEQ;
      "Propag"  -> ?RULE_PROPAG;
+     "Flag"    -> ?RULE_PROCESS_FLAG;
      "Send"    -> ?RULE_SEND;
      "Receive" -> ?RULE_RECEIVE;
      "Spawn"   -> ?RULE_SPAWN;
+     "SpawnLink" ->?RULE_SPAWN_LINK;
      "Self"    -> ?RULE_SELF
   end.
 

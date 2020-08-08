@@ -18,10 +18,12 @@
 
 -define(RULE_SEQ,      seq).
 -define(RULE_PROPAG,   propag).
+-define(RULE_PROCESS_FLAG,   process_flag).
 -define(RULE_CHECK,    check).
 -define(RULE_SEND,     send).
 -define(RULE_RECEIVE, 'receive').
 -define(RULE_SPAWN,    spawn).
+-define(RULE_SPAWN_LINK,    spawn_link).
 -define(RULE_SELF,     self).
 -define(RULE_SCHED,    sched).
 

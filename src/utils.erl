@@ -552,7 +552,10 @@ pp_trace_item(#trace{type = Type,
   case Type of
     ?RULE_SEND    -> pp_trace_send(From, To, Val, Time);
     ?RULE_SPAWN   -> pp_trace_spawn(From, To);
-    ?RULE_RECEIVE -> pp_trace_receive(From, Val, Time)
+    ?RULE_SPAWN_LINK   -> pp_trace_spawn_link(From, To);
+    ?RULE_RECEIVE -> pp_trace_receive(From, Val, Time);
+    ?RULE_PROCESS_FLAG -> pp_trace_flag(From,Val);
+    ?RULE_PROPAG -> pp_trace_propag(From, To)
   end.
 
 pp_trace_send(From, To, Val, Time) ->
@@ -561,8 +564,24 @@ pp_trace_send(From, To, Val, Time) ->
 pp_trace_spawn(From, To) ->
   [pp_pid(From)," spawns ",pp_pid(To)].
 
+pp_trace_spawn_link(From, To) ->
+  [pp_pid(From)," spawns and links with ",pp_pid(To)].
+
+pp_trace_flag(From,Val) ->
+  [pp_pid(From)," set process flag to ",pp(Val)].
+
+pp_trace_propag(From, To) ->
+  [pp_pid(From)," propagated to ",pp_links(To)].
+
 pp_trace_receive(From, Val, Time) ->
   [pp_pid(From)," receives ",pp(Val)," (",integer_to_list(Time),")"].
+
+
+pp_links(Links)->
+  A=fun(Pid,Acc)->Acc++","++pp(Pid) end,
+  String=lists:foldl(A,"",Links),
+  [[],StringLinks]=string:split(String,","),
+  "Procs ("++StringLinks++")".
 
 %%--------------------------------------------------------------------
 %% @doc Prints a given system roll log

@@ -371,7 +371,9 @@ eval_step(System, Pid) ->
             {NewProcs,HistVal,NewMsgs,_}=lists:foldl(fun utils:fwd_propag_normal/2,Acc,LinkedProcs)
         end,
         NewProc=Proc#proc{links=[],hist=[{propag,Env,Exp,Mail,HistVal}|Hist]},%"uccidi" il processo,rompendo tutti i link
-        System#sys{msgs=NewMsgs,procs=[NewProc|NewProcs]};
+        TraceItem = #trace{type = ?RULE_PROPAG,from = Pid,to=Links},
+        NewTrace = [TraceItem|Trace],
+        System#sys{msgs=NewMsgs,procs=[NewProc|NewProcs],trace=NewTrace};
       true->
         {NewEnv, NewExp, Label} = eval_seq(Env,Flag,Exp),
         case Label of
@@ -381,7 +383,9 @@ eval_step(System, Pid) ->
         {process_flag,NewFlag}->
           NewHist=[{process_flag,Env,Exp,Flag}|Hist],
           NewProc=Proc#proc{flag=NewFlag,hist=NewHist,env=NewEnv,exp=NewExp},
-          System#sys{msgs = Msgs,procs=[NewProc|RestProcs]};
+          TraceItem = #trace{type = ?RULE_PROCESS_FLAG,from = Pid,val=NewFlag},
+          NewTrace = [TraceItem|Trace],
+          System#sys{msgs = Msgs,procs=[NewProc|RestProcs], trace = NewTrace};
         {exit,Reason}->
           NewHist=[{exit,Env,Exp,Reason}|Hist],
           NewProc=Proc#proc{hist=NewHist,exp=cerl:abstract({exit,Reason})},
@@ -436,7 +440,7 @@ eval_step(System, Pid) ->
           RepExp = utils:replace(Var, SpawnPid, NewExp),
           NewLinks=[SpawnPid|Links],
           NewProc = Proc#proc{hist = NewHist,links=NewLinks,env = NewEnv, exp = RepExp},
-          TraceItem = #trace{type = ?RULE_SPAWN, from = Pid, to = SpawnPid},%%aggiungere la macro ?RULE_SPAWN_LINK
+          TraceItem = #trace{type = ?RULE_SPAWN_LINK, from = Pid, to = SpawnPid},%%aggiungere la macro ?RULE_SPAWN_LINK
           NewTrace = [TraceItem|Trace],
           System#sys{msgs = Msgs, procs = [NewProc|[SpawnProc|RestProcs]], trace = NewTrace};
         {rec, Var, ReceiveClauses} ->
@@ -645,8 +649,9 @@ eval_exp_opt(Exp, Env, Mail) ->
                       eval_exp_list_opt(CallArgs, Env, Mail);
                     false ->
                       case {CallModule, CallName} of
+                        {{c_literal, _, 'erlang'},{c_literal, _, 'process_flag'}} -> #opt{rule = ?RULE_PROCESS_FLAG};
                         {{c_literal, _, 'erlang'},{c_literal, _, 'spawn'}} -> #opt{rule = ?RULE_SPAWN};
-                        {{c_literal, _, 'erlang'},{c_literal, _, 'spawn_link'}} -> #opt{rule = ?RULE_SPAWN};
+                        {{c_literal, _, 'erlang'},{c_literal, _, 'spawn_link'}} -> #opt{rule = ?RULE_SPAWN_LINK};
                         {{c_literal, _, 'erlang'},{c_literal, _, 'self'}} -> #opt{rule = ?RULE_SELF};
                         {{c_literal, _, 'erlang'},{c_literal, _, '!'}} -> #opt{rule = ?RULE_SEND};
                         _ -> #opt{rule = ?RULE_SEQ}

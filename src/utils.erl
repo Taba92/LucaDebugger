@@ -125,40 +125,54 @@ pid_exists(Procs, Pid) ->
 %%aggiunte luca
 
 %%rolling back a propagation
-backPropagStep({LinkPid,error},{OldNotLinked,OldLinked,Msgs,Pid})->
+backPropagStep({LinkPid,error},{OldNotLinked,OldLinked,Msgs})->
   {CurProc,_}=select_proc(OldLinked,LinkPid),
   #proc{links=Links,hist=[CurHist|RestHist]}=CurProc,
-  {signal,OldEnv,OldExp,OldMail,_}=CurHist,
+  {signal,OldEnv,OldExp,OldMail,Pid}=CurHist,
   OldProc=#proc{pid=LinkPid,links=[Pid|Links],hist=RestHist,env=OldEnv,exp=OldExp,mail=OldMail},
   {[OldProc|OldNotLinked],OldLinked,Msgs,Pid};
-backPropagStep({LinkPid,normal},{OldNotLinked,OldLinked,Msgs,Pid})->
+backPropagStep({LinkPid,normal},{OldNotLinked,OldLinked,Msgs})->
   {CurProc,_}=select_proc(OldLinked,LinkPid),
-  #proc{links=Links}=CurProc,
-  OldProc=CurProc#proc{links=[Pid|Links]},
+  #proc{links=Links,hist=[CurHist|RestHist]}=CurProc,
+  {signal,Pid}=CurHist,
+  OldProc=CurProc#proc{links=[Pid|Links],hist=RestHist},
   {[OldProc|OldNotLinked],OldLinked,Msgs,Pid};
-backPropagStep({LinkPid,_,Time},{OldNotLinked,OldLinked,Msgs,Pid})->
+backPropagStep({LinkPid,_,Time},{OldNotLinked,OldLinked,Msgs})->
   {CurProc,_}=select_proc(OldLinked,LinkPid),
   {_,OldMsgs}=select_msg(Msgs,Time),
-  #proc{links=Links}=CurProc,
-  OldProc=CurProc#proc{links=[Pid|Links]},
-  {[OldProc|OldNotLinked],OldLinked,OldMsgs,Pid}.
+  #proc{links=Links,hist=[CurHist|RestHist]}=CurProc,
+  {signal,Pid}=CurHist,
+  OldProc=CurProc#proc{links=[Pid|Links],hist=RestHist},
+  {[OldProc|OldNotLinked],OldLinked,OldMsgs}.
 %%
 
 %%In case of  propagation,check if a process can rollback its propagation
 
-checkBackPropag({LinkPid,MsgValue,Time},{RestProcs,Msgs,Bool})->%%se era in trap_exit true(è uguale sia per sgnale errore che normale)
+checkBackPropag({LinkPid,MsgValue,Time},{RestProcs,Msgs,Pid,Bool})->%%se era in trap_exit true(è uguale sia per sgnale errore che normale)
     Msg = #msg{dest = LinkPid, val = MsgValue, time = Time},
-    {RestProcs,Msgs,Bool and lists:member(Msg,Msgs)};
-checkBackPropag({_,normal},{RestProcs,Msgs,Bool})->%se era in trap_exit false ed è un normal exit
-  {RestProcs,Msgs,Bool and true};
-checkBackPropag({LinkPid,error},{RestProcs,Msgs,Bool})->%se era in trap_exit false ed è un segnale di errore
+    {LinkProc,_}=select_proc(RestProcs,LinkPid),
+    [CurHist|_]=LinkProc#proc.hist,
+    Val=case CurHist of
+        {signal,Pid}->true;
+        _->false
+      end,
+    {RestProcs,Msgs,Pid,Bool and lists:member(Msg,Msgs) and Val};
+checkBackPropag({LinkPid,normal},{RestProcs,Msgs,Pid,Bool})->%se era in trap_exit false ed è un normal exit
+  {LinkProc,_}=select_proc(RestProcs,LinkPid),
+  [CurHist|_]=LinkProc#proc.hist,
+  Val=case CurHist of
+        {signal,Pid}->true;
+        _->false
+      end,
+  {RestProcs,Msgs,Pid,Bool and Val};
+checkBackPropag({LinkPid,error},{RestProcs,Msgs,Pid,Bool})->%se era in trap_exit false ed è un segnale di errore
       {LinkProc,_}=select_proc(RestProcs,LinkPid),
       [CurHist|_]=LinkProc#proc.hist,
-      case CurHist of
-        {signal,_,_,_,_}->Val=true;
-        {propag,_,_,_,_}->Val=false
+      Val=case CurHist of
+        {signal,_,_,_,Pid}->true;
+        _->false
       end,
-      {RestProcs,Msgs,Bool and Val}.
+      {RestProcs,Msgs,Pid,Bool and Val}.
 %%%
 
 fwd_propag_err(LinkedProc,{Procs,HistList,Msgs,Pid,NewExp})->
@@ -171,7 +185,8 @@ fwd_propag_err(LinkedProc,{Procs,HistList,Msgs,Pid,NewExp})->
         ref_add(?FRESH_TIME, Time + 1),
         MsgValue=cerl:abstract({'EXIT',cerl:concrete(Pid),Reason}),
         NewMsg = #msg{dest = LinkPid, val = MsgValue, time = Time},
-        NewLinkedProc=LinkedProc#proc{links=NewLinks},
+        NewHist=[{signal,Pid}|Hist],
+        NewLinkedProc=LinkedProc#proc{links=NewLinks,hist=NewHist},
         HistVal={LinkPid,MsgValue,Time},
         {[NewLinkedProc|Procs],[HistVal|HistList],[NewMsg|Msgs],Pid,NewExp};
       _->
@@ -182,7 +197,7 @@ fwd_propag_err(LinkedProc,{Procs,HistList,Msgs,Pid,NewExp})->
     end.
 
 fwd_propag_normal(LinkedProc,{Procs,HistList,Msgs,Pid})->
-    #proc{pid =LinkPid,flag=Flag,links=LinkedProcLinks}=LinkedProc,
+    #proc{pid =LinkPid,flag=Flag,links=LinkedProcLinks,hist=Hist}=LinkedProc,
     NewLinks=lists:delete(Pid,LinkedProcLinks),
     case cerl:concrete(Flag) of
       true->
@@ -190,11 +205,13 @@ fwd_propag_normal(LinkedProc,{Procs,HistList,Msgs,Pid})->
         ref_add(?FRESH_TIME, Time + 1),
         MsgValue=cerl:abstract({'EXIT',cerl:concrete(Pid),normal}),
         NewMsg = #msg{dest = LinkPid, val = MsgValue, time = Time},
-        NewLinkedProc=LinkedProc#proc{links=NewLinks},
+        NewHist=[{signal,Pid}|Hist],
+        NewLinkedProc=LinkedProc#proc{links=NewLinks,hist=NewHist},
         HistVal={LinkPid,MsgValue,Time},
         {[NewLinkedProc|Procs],[HistVal|HistList],[NewMsg|Msgs],Pid};
       _->
-        NewLinkedProc=LinkedProc#proc{links=NewLinks},
+        NewHist=[{signal,Pid}|Hist],
+        NewLinkedProc=LinkedProc#proc{links=NewLinks,hist=NewHist},
         HistVal={LinkPid,normal},
         {[NewLinkedProc|Procs],[HistVal|HistList],Msgs,Pid}
     end.
@@ -461,6 +478,7 @@ is_conc_item({spawn_link,_,_,_}) -> true;
 is_conc_item({process_flag,_,_,_}) -> true;
 is_conc_item({propag,_,_,_,_}) -> true;
 is_conc_item({signal,_,_,_,_}) -> true;
+is_conc_item({signal,_}) -> true;
 is_conc_item(_) -> false.
 
 pp_hist(Hist, Opts) ->
@@ -497,6 +515,8 @@ pp_hist_2({propag,_,_,_,HistVal}) ->
   [[],LinksString]=string:split(String,","),
   "propag(" ++ [{?CAUDER_GREEN, LinksString}] ++ ")";
 pp_hist_2({signal,_,_,_,FromPid}) ->
+  "signal(" ++ [{?CAUDER_GREEN, pp(FromPid)}] ++ ")";
+pp_hist_2({signal,FromPid}) ->
   "signal(" ++ [{?CAUDER_GREEN, pp(FromPid)}] ++ ")".
 
 stringify(HistLink,Acc)->

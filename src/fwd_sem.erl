@@ -358,20 +358,24 @@ eval_step(System, Pid) ->
         {LinkedProcs,NotLinkedProcs}=utils:select_linked_procs(RestProcs,Links),
         case cerl:concrete(Exp) of
           {error,_,stack}->
+            Type=error,
             Acc={NotLinkedProcs,[],Msgs,Pid,Exp},
             {NewProcs,HistVal,NewMsgs,_,_}=lists:foldl(fun utils:fwd_propag_err/2,Acc,LinkedProcs);
           {exit,Reason}when Reason/=normal->
+          Type=error,
             Acc={NotLinkedProcs,[],Msgs,Pid,Exp},
             {NewProcs,HistVal,NewMsgs,_,_}=lists:foldl(fun utils:fwd_propag_err/2,Acc,LinkedProcs);
           {exit,normal}->
+            Type=normal,
             Acc={NotLinkedProcs,[],Msgs,Pid},
             {NewProcs,HistVal,NewMsgs,_}=lists:foldl(fun utils:fwd_propag_normal/2,Acc,LinkedProcs);
           _->%%terminazione normale del codice
+            Type=normal,
             Acc={NotLinkedProcs,[],Msgs,Pid},
             {NewProcs,HistVal,NewMsgs,_}=lists:foldl(fun utils:fwd_propag_normal/2,Acc,LinkedProcs)
         end,
-        NewProc=Proc#proc{links=[],hist=[{propag,Env,Exp,Mail,HistVal}|Hist]},%"uccidi" il processo,rompendo tutti i link
-        TraceItem = #trace{type = ?RULE_PROPAG,from = Pid,to=Links},
+        NewProc=Proc#proc{links=[],hist=[{propag,Env,Exp,Mail,Type,HistVal}|Hist]},%"uccidi" il processo,rompendo tutti i link
+        TraceItem = #trace{type = ?RULE_PROPAG,from = Pid,to=Links,val=Type},
         NewTrace = [TraceItem|Trace],
         System#sys{msgs=NewMsgs,procs=[NewProc|NewProcs],trace=NewTrace};
       true->

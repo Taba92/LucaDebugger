@@ -130,13 +130,13 @@ backPropagStep({LinkPid,error},{OldNotLinked,OldLinked,Msgs})->
   #proc{links=Links,hist=[CurHist|RestHist]}=CurProc,
   {signal,OldEnv,OldExp,OldMail,Pid}=CurHist,
   OldProc=#proc{pid=LinkPid,links=[Pid|Links],hist=RestHist,env=OldEnv,exp=OldExp,mail=OldMail},
-  {[OldProc|OldNotLinked],OldLinked,Msgs,Pid};
+  {[OldProc|OldNotLinked],OldLinked,Msgs};
 backPropagStep({LinkPid,normal},{OldNotLinked,OldLinked,Msgs})->
   {CurProc,_}=select_proc(OldLinked,LinkPid),
   #proc{links=Links,hist=[CurHist|RestHist]}=CurProc,
   {signal,Pid}=CurHist,
   OldProc=CurProc#proc{links=[Pid|Links],hist=RestHist},
-  {[OldProc|OldNotLinked],OldLinked,Msgs,Pid};
+  {[OldProc|OldNotLinked],OldLinked,Msgs};
 backPropagStep({LinkPid,_,Time},{OldNotLinked,OldLinked,Msgs})->
   {CurProc,_}=select_proc(OldLinked,LinkPid),
   {_,OldMsgs}=select_msg(Msgs,Time),
@@ -476,7 +476,7 @@ is_conc_item({send,_,_,_,_}) -> true;
 is_conc_item({rec,_,_,_,_}) -> true;
 is_conc_item({spawn_link,_,_,_}) -> true;
 is_conc_item({process_flag,_,_,_}) -> true;
-is_conc_item({propag,_,_,_,_}) -> true;
+is_conc_item({propag,_,_,_,_,_}) -> true;
 is_conc_item({signal,_,_,_,_}) -> true;
 is_conc_item({signal,_}) -> true;
 is_conc_item(_) -> false.
@@ -500,6 +500,10 @@ pp_hist_2({tau,_,_}) ->
   "seq";
 pp_hist_2({self,_,_}) ->
   "self";
+pp_hist_2({error,_,_,Reason}) ->
+  "error("++atom_to_list(Reason)++")";
+pp_hist_2({exit,_,_,Reason}) ->
+  "exit("++atom_to_list(Reason)++")";
 pp_hist_2({spawn,_,_,Pid}) ->
   "spawn(" ++ [{?CAUDER_GREEN, pp(Pid)}] ++ ")";
 pp_hist_2({send,_,_,_,{Value,Time}}) ->
@@ -510,7 +514,7 @@ pp_hist_2({spawn_link,_,_,Pid}) ->
   "spawn_link(" ++ [{?CAUDER_GREEN, pp(Pid)}] ++ ")";
 pp_hist_2({process_flag,_,_,Flag}) ->
   "p_flag(" ++ [{?CAUDER_GREEN, pp(Flag)}] ++ ")";
-pp_hist_2({propag,_,_,_,HistVal}) ->
+pp_hist_2({propag,_,_,_,_,HistVal}) ->
   String=lists:foldl(fun stringify/2,"",HistVal),
   [[],LinksString]=string:split(String,","),
   "propag(" ++ [{?CAUDER_GREEN, LinksString}] ++ ")";
@@ -575,7 +579,7 @@ pp_trace_item(#trace{type = Type,
     ?RULE_SPAWN_LINK   -> pp_trace_spawn_link(From, To);
     ?RULE_RECEIVE -> pp_trace_receive(From, Val, Time);
     ?RULE_PROCESS_FLAG -> pp_trace_flag(From,Val);
-    ?RULE_PROPAG -> pp_trace_propag(From, To)
+    ?RULE_PROPAG -> pp_trace_propag(From, To,Val)
   end.
 
 pp_trace_send(From, To, Val, Time) ->
@@ -590,8 +594,8 @@ pp_trace_spawn_link(From, To) ->
 pp_trace_flag(From,Val) ->
   [pp_pid(From)," set process flag to ",pp(Val)].
 
-pp_trace_propag(From, To) ->
-  [pp_pid(From)," propagated to ",pp_links(To)].
+pp_trace_propag(From, To,Val) ->
+  [pp_pid(From)," propagated "++atom_to_list(Val)++" to ",pp_links(To)].
 
 pp_trace_receive(From, Val, Time) ->
   [pp_pid(From)," receives ",pp(Val)," (",integer_to_list(Time),")"].
@@ -601,7 +605,7 @@ pp_links(Links)->
   A=fun(Pid,Acc)->Acc++","++pp(Pid) end,
   String=lists:foldl(A,"",Links),
   [[],StringLinks]=string:split(String,","),
-  "Procs ("++StringLinks++")".
+  "Procs {"++StringLinks++"}".
 
 %%--------------------------------------------------------------------
 %% @doc Prints a given system roll log

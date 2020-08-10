@@ -30,13 +30,13 @@ eval_step(System, Pid) ->
       TraceItem = #trace{type = ?RULE_PROCESS_FLAG,from = Pid,val=Flag},
       OldTrace = lists:delete(TraceItem, Trace),
       System#sys{msgs = Msgs,procs=[OldProc|RestProcs],trace=OldTrace};
-    {propag,OldEnv,OldExp,OldMail,Signals}->
+    {propag,OldEnv,OldExp,OldMail,Type,Signals}->
       OldLinks=[element(1,Signal)||Signal<-Signals],
       {OldLinkedProcs,OldNotLinkedProcs}=utils:select_linked_procs(RestProcs,OldLinks),
       Acc={OldNotLinkedProcs,OldLinkedProcs,Msgs},
       {OldProcs,_,OldMsgs}=lists:foldl(fun utils:backPropagStep/2,Acc,Signals),
       OldProc=Proc#proc{links=OldLinks,hist=RestHist,env=OldEnv,exp=OldExp,mail=OldMail},
-      TraceItem = #trace{type = ?RULE_PROPAG,from = Pid,to =OldLinks},
+      TraceItem = #trace{type = ?RULE_PROPAG,from = Pid,to =OldLinks,val=Type},
       OldTrace = lists:delete(TraceItem, Trace),
       System#sys{msgs=OldMsgs,procs=[OldProc|OldProcs],trace=OldTrace};
     {exit,OldEnv,OldExp,_}->
@@ -135,12 +135,12 @@ eval_proc_opt(RestSystem, CurProc) ->
       [CurHist|_RestHist] ->
         case CurHist of
           {tau,_,_} ->  ?RULE_SEQ;
-          {process_flag,_,_,_} ->  ?RULE_SEQ;
+          {process_flag,_,_,_} ->  ?RULE_PROCESS_FLAG;
           {exit,_,_,_}->?RULE_SEQ;
           {error,_,_,_}->?RULE_SEQ;
           {signal,_,_,_,_}->?NULL_RULE;
           {signal,_}->?NULL_RULE;
-          {propag,_,_,_,Signals}->
+          {propag,_,_,_,_,Signals}->
             Id=CurProc#proc.pid,
             Acc={RestProcs,Msgs,Id,true},
             {_,_,_,Bool}=lists:foldl(fun utils:checkBackPropag/2,Acc,Signals),

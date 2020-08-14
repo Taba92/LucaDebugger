@@ -6,7 +6,7 @@ main()->
 	spawn_link(?MODULE,spawnErr,[0]),
 	self().
 
-spawnErr(3)->3/0;
+spawnErr(2)->3/0;
 spawnErr(N)->
 	spawn_link(?MODULE,spawnErr,[N+1]),
-	3/0.
+	3/0

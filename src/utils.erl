@@ -124,7 +124,7 @@ pid_exists(Procs, Pid) ->
 
 %%aggiunte luca
 
-%%rolling back a propagation
+%%roll back a signal
 backPropagStep({LinkPid,error},{OldNotLinked,OldLinked,Msgs})->
   {CurProc,_}=select_proc(OldLinked,LinkPid),
   #proc{links=Links,hist=[CurHist|RestHist]}=CurProc,

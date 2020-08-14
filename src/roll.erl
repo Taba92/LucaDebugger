@@ -20,6 +20,8 @@ can_roll(#sys{procs = Procs}, Pid) ->
       Mail = Proc#proc.mail,
       case {Hist, Mail} of
         {[], []} -> false;
+        {[{signal,_}|_], []} -> false;
+        {[{signal,_,_,_,_,_}|_], []} -> false;
         _ -> true
       end
   end.
@@ -39,33 +41,56 @@ eval_step(System, Pid) ->
       LogSystem = System#sys{roll = NewLog},
       ?LOG("ROLLing back SPAWN of " ++ ?TO_STRING(cerl:concrete(SpawnPid))),
       roll_spawn(LogSystem, Pid, SpawnPid);
-    _ ->
+    {propag,_,_,_,_,Signals}->   
+      Acc={System,Pid},
+      {NewSystem,_}=lists:foldl(fun roll_signal/2,Acc,Signals),
+      RollOpts = roll_opts(NewSystem, Pid),
+      io:fwrite("ROLL OPT: ~p~n",[RollOpts]),
+      io:fwrite("------------------------~n"),
+      cauder:eval_step(NewSystem, hd(RollOpts));
+    _->
       RollOpts = roll_opts(System, Pid),
+      io:fwrite("ROLL OPT: ~p~n",[RollOpts]),
+      io:fwrite("------------------------~n"),
       cauder:eval_step(System, hd(RollOpts))
   end.
 
+roll_signal({LinkPid,error},{System,Pid})->
+  {LinkProc,_}=utils:select_proc(System#sys.procs,LinkPid),
+  [CurHist|_]=LinkProc#proc.hist,
+  case CurHist of
+        {signal,_,_,_,Pid}->{System,Pid};
+        _->{eval_step(System,LinkPid),Pid}
+  end;
+roll_signal({LinkPid,normal},{System,Pid})->
+  {LinkProc,_}=utils:select_proc(System#sys.procs,LinkPid),
+  [CurHist|_]=LinkProc#proc.hist,
+  case CurHist of
+        {signal,Pid}->{System,Pid};
+        _->NewSystem=eval_step(System,LinkPid),
+          roll_signal({LinkPid,normal},{NewSystem,Pid})
+  end.
+
 roll_send(System, Pid, OtherPid, Time) ->
-  SendOpts = lists:filter(fun (X) -> X#opt.rule == ?RULE_SEND end,
-                          roll_opts(System, Pid)),
+  %%si chiede se può far tornare indietro la send direttamente,assieme al case
+  SendOpts = lists:filter(fun (X) -> X#opt.rule == ?RULE_SEND end,roll_opts(System, Pid)),
   case SendOpts of
-    [] ->
-      SchedOpts = [ X || X <- roll_sched_opts(System, OtherPid),
-                              X#opt.id == Time],
+    [] ->%%se la send non può essere fatta tornare indietro direttamente
+      SchedOpts = [ X || X <- roll_sched_opts(System, OtherPid),X#opt.id == Time],%%si chiede se il messaggio e nella local mailbox a cui è stato inviato
       case SchedOpts of
-        [] ->
+        [] ->%% se non c'è
           NewSystem = eval_step(System, OtherPid),
           roll_send(NewSystem, Pid, OtherPid, Time);
-        _ ->
+        _ ->%%se c'è il messaggio
           NewSystem = cauder:eval_step(System, hd(SchedOpts)),
           roll_send(NewSystem, Pid, OtherPid, Time)
       end;
-    _ ->
+    _ ->%%se la send può essere fatta tornare indietro direttamente
       cauder:eval_step(System, hd(SendOpts))
   end.
 
 roll_spawn(System, Pid, OtherPid) ->
-  SpawnOpts = lists:filter(fun (X) -> X#opt.rule == ?RULE_SPAWN end,
-                           roll_opts(System, Pid)),
+  SpawnOpts = lists:filter(fun (X) -> X#opt.rule == ?RULE_SPAWN end,roll_opts(System, Pid)),
   case SpawnOpts of
     [] ->
       NewSystem = eval_step(System, OtherPid),

@@ -9,4 +9,4 @@ main()->
 spawnErr(2)->3/0;
 spawnErr(N)->
 	spawn_link(?MODULE,spawnErr,[N+1]),
-	3/0
+	3/0.

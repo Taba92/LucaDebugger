@@ -168,7 +168,7 @@ eval_proc_opt(RestSystem, CurProc) ->
             {SpawnProc, _RestProcs} = utils:select_proc(RestProcs, SpawnPid),
             #proc{hist = SpawnHist, mail = SpawnMail} = SpawnProc,
             case {SpawnHist, SpawnMail} of
-              {[], []} -> ?RULE_SPAWN;
+              {[], []} -> ?RULE_SPAWN_LINK;
               _ -> ?NULL_RULE
             end;
           {rec,_,_, ConsMsg, OldMail} ->

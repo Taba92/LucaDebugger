@@ -8,7 +8,7 @@ main()->
 
 spawnNorm(2)->self(),self(),3/1;
 spawnNorm(N)->
-	spawn_link(?MODULE,spawnErr,[N+1]),
+	spawn_link(?MODULE,spawnNorm,[N+1]),
 	self(),
 	self(),
-	3/1
+	3/1.

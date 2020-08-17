@@ -199,8 +199,10 @@ parse_opt([], S, CollectorOpt) ->
 parse_opt([H | T], S, CollectorOpt) ->
     case H of
         %STORE THE ASYNC PATTERNS SELECTED FROM THE USER WITH ITS HOMOLOGIST LABEL
-        {async_patterns,{Spawn,Send,Receive,Exit}} ->
-            parse_opt(T, S#state{async_patterns=#{Spawn=>spawn,Send=>send,Receive=>'receive',Exit=>exit}}, CollectorOpt);
+        {async_patterns,{Spawn,SpawnLink,ProcessFlag,PropagNormal,PropagError,Send,Receive,Exit}} ->
+            Patterns=#{Spawn=>spawn,SpawnLink=>spawn_link,ProcessFlag=>p_flag,Send=>send,
+                PropagNormal=>propag_normal,PropagError=>propag_error,Receive=>'receive',Exit=>exit},
+            parse_opt(T, S#state{async_patterns=Patterns}, CollectorOpt);
         {async_patterns,_Else} ->
             parse_opt(T, S#state{async_patterns=undefined}, CollectorOpt);
         %SELECT IF YOU WANT AN ASYNC BEHAVIOUR OR NOT
@@ -1665,6 +1667,24 @@ draw_named_arrow(Label, FromName, ToName, FromPos, ToPos, E, S, DC) ->
                         draw_lifeline(S3,S3#state.y_pos,Pos,DC),
                         drawStartPoint(S3,DC,FromPos,S3#state.y_pos),
                         draw_label(Label, FromName, ToName, FromPos, ToPos, S3, DC);
+                    spawn_link->
+                        S3 = draw_arrow(FromPos, ToPos, S2, DC),
+                        Pos=getActorToPos(S3#state.actors,E,0),
+                        draw_lifeline(S3,S3#state.y_pos,Pos,DC),
+                        drawStartPoint(S3,DC,FromPos,S3#state.y_pos),
+                        draw_label(Label, FromName, ToName, FromPos, ToPos, S3, DC);
+                    propag_normal->
+                        S3 = draw_arrow(FromPos, ToPos, S2, DC),
+                        drawStartPoint(S3,DC,FromPos,S3#state.y_pos),
+                        draw_label(Label, FromName, ToName, FromPos, ToPos, S3, DC);
+                    propag_error->
+                        S3 = draw_arrow(FromPos, ToPos, S2, DC),
+                        drawStartPoint(S3,DC,FromPos,S3#state.y_pos),
+                        draw_label(Label, FromName, ToName, FromPos, ToPos, S3, DC);
+                    p_flag->
+                        S3 = draw_arrow(FromPos, ToPos, S2, DC),
+                        drawStartPoint(S3,DC,FromPos,S3#state.y_pos),
+                        draw_label(Label, FromName, ToName, FromPos, ToPos, S3, DC);
                     'receive'->
                         S3=draw_arrow(FromPos,FromPos,S2,DC),
                         MirrorSendPos=cercaSpec(E#e.event,queue_to_list(S3#state.events),S3),
@@ -1772,10 +1792,14 @@ getAsyncPatternsKeys(AsyncPattern)->
         Map->
             L=maps:to_list(AsyncPattern),
             {Spawn,spawn}=lists:keyfind(spawn,2,L),
+            {SpawnLink,spawn_link}=lists:keyfind(spawn_link,2,L),
+            {ProcessFlag,p_flag}=lists:keyfind(p_flag,2,L),
+            {PropagNormal,propag_normal}=lists:keyfind(propag_normal,2,L),
+            {PropagError,propag_error}=lists:keyfind(propag_error,2,L),
             {Send,send}=lists:keyfind(send,2,L),
             {Receive,'receive'}=lists:keyfind('receive',2,L),
             {Exit,exit}=lists:keyfind(exit,2,L),
-            {Spawn,Send,Receive,Exit}
+            {Spawn,SpawnLink,ProcessFlag,PropagNormal,PropagError,Send,Receive,Exit}
     end.
 
  keepAlive(S,EventSpawn,DC)->%used when scrolling,to keep alive already alive actors

@@ -207,6 +207,8 @@ eval_roll_until_spawn(System, Pid, SpawnPid) ->
   case CurHist of
     {spawn,_,_,SpawnPid} ->
       eval_step(System, Pid);
+    {spawn_link,_,_,SpawnPid} ->
+      eval_step(System, Pid);
     _ ->
       NewSystem = eval_step(System, Pid),
       eval_roll_until_spawn(NewSystem, Pid, SpawnPid)

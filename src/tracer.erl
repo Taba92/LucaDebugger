@@ -9,9 +9,21 @@ showEvent(CollectorPid,#trace{type=Type,from=From,to=To,val=Val,time=Time})->
 	case Type of
 		?RULE_SPAWN->
 			et_collector:report_event(CollectorPid,85,From,To,Type,Val);
+		?RULE_SPAWN_LINK->
+			et_collector:report_event(CollectorPid,85,From,To,Type,Val);
+		?RULE_PROCESS_FLAG->
+			et_collector:report_event(CollectorPid,85,From,To,Type,Val);
+		propag_normal->
+			et_collector:report_event(CollectorPid,85,From,To,Type,Val);
+		propag_error->
+			et_collector:report_event(CollectorPid,85,From,To,Type,Val);
+		exit->
+			et_collector:report_event(CollectorPid,85,From,To,Type,Val);
 		_->
 			et_collector:report_event(CollectorPid,85,From,To,Type,Val++" ("++integer_to_list(Time)++")")
-	end.
+	end;
+showEvent(CollectorPid,ListTrace)->
+	[showEvent(CollectorPid,Trace)||Trace<-ListTrace].
 
 %%cit converts the FIELDS of the trace into human-readable form and in the receive case, it associates its sender
 parseTrace(ListTrace,#trace{type=Type,from=From,to=To,val=Val,time=Time})->
@@ -22,12 +34,29 @@ parseTrace(ListTrace,#trace{type=Type,from=From,to=To,val=Val,time=Time})->
 		?RULE_SEND->
 			#trace{type=Type,from=pp(From),to=pp(To),val=pp(Val),time=Time};
 		?RULE_SPAWN->
-			#trace{type=Type,from=pp(From),to=pp(To),val=Val,time=Time}
+			#trace{type=Type,from=pp(From),to=pp(To),val=Val,time=Time};
+		?RULE_SPAWN_LINK->
+			#trace{type=Type,from=pp(From),to=pp(To),val=Val,time=Time};
+		?RULE_PROCESS_FLAG->
+			#trace{type=Type,from=pp(From),to=pp(From),val=pp(Val),time=Time};
+		?RULE_PROPAG->
+			io:fwrite("VAL: ~p~n",[Val]),
+			[T|Signals]=Val,
+			Rule="propag_"++atom_to_list(T),
+			SignalsTrace=[tracify(list_to_atom(Rule),From,Signal)||Signal<-Signals],
+			SignalsTrace++[#trace{type=exit,from=pp(From),to=pp(From)}]
 	end.
+tracify(Rule,From,{LinkPid,MsgValue,Time})->
+	#trace{type=Rule,from=pp(From),to=pp(LinkPid),val=pp(MsgValue)};
+tracify(Rule,From,{LinkPid,error})->
+	#trace{type=Rule,from=pp(From),to=pp(LinkPid)};
+tracify(Rule,From,{LinkPid,normal})->
+	#trace{type=Rule,from=pp(From),to=pp(LinkPid)}.
 
 init()->%%initialize the tracer
 	{ok,CollectorPid}=et_collector:start_link([]),
-	et_viewer:start([{max_actors,20},{collector_pid,CollectorPid},{async,true},{async_patterns,{?RULE_SPAWN,?RULE_SEND,?RULE_RECEIVE,exit}}]),
+	Patterns={?RULE_SPAWN,?RULE_SPAWN_LINK,?RULE_PROCESS_FLAG,propag_normal,propag_error,?RULE_SEND,?RULE_RECEIVE,exit},
+	et_viewer:start([{max_actors,20},{collector_pid,CollectorPid},{async,true},{async_patterns,Patterns}]),
 	showingTrace(CollectorPid,[]).
 
 

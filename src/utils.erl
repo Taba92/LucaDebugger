@@ -175,7 +175,7 @@ checkBackPropag({LinkPid,error},{RestProcs,Msgs,Pid,Bool})->%se era in trap_exit
       {RestProcs,Msgs,Pid,Bool and Val}.
 %%%
 
-fwd_propag_err(LinkedProc,{Procs,HistList,Msgs,Pid,NewExp})->
+fwd_propag_err(LinkedProc,{Procs,HistList,Pid,NewExp})->
     #proc{pid =LinkPid,flag=Flag,links=LinkedProcLinks,hist=Hist,env=Env,exp=Exp,mail=Mail}=LinkedProc,
     Reason=element(2,cerl:concrete(NewExp)), 
     NewLinks=lists:delete(Pid,LinkedProcLinks),
@@ -184,36 +184,36 @@ fwd_propag_err(LinkedProc,{Procs,HistList,Msgs,Pid,NewExp})->
         Time = ref_lookup(?FRESH_TIME),
         ref_add(?FRESH_TIME, Time + 1),
         MsgValue=cerl:abstract({'EXIT',cerl:concrete(Pid),Reason}),
-        NewMsg = #msg{dest = LinkPid, val = MsgValue, time = Time},
         NewHist=[{signal,Pid}|Hist],
-        NewLinkedProc=LinkedProc#proc{links=NewLinks,hist=NewHist},
+        NewMail = [{MsgValue,Time}|Mail],
+        NewLinkedProc=LinkedProc#proc{links=NewLinks,hist=NewHist,mail=NewMail},
         HistVal={LinkPid,MsgValue,Time},
-        {[NewLinkedProc|Procs],[HistVal|HistList],[NewMsg|Msgs],Pid,NewExp};
+        {[NewLinkedProc|Procs],[HistVal|HistList],Pid,NewExp};
       _->
         NewHist=[{signal,Env,Exp,Mail,Pid}|Hist],
         NewLinkedProc=LinkedProc#proc{links=NewLinks,hist=NewHist,exp=NewExp},
         HistVal={LinkPid,error},
-        {[NewLinkedProc|Procs],[HistVal|HistList],Msgs,Pid,NewExp}
+        {[NewLinkedProc|Procs],[HistVal|HistList],Pid,NewExp}
     end.
 
-fwd_propag_normal(LinkedProc,{Procs,HistList,Msgs,Pid})->
-    #proc{pid =LinkPid,flag=Flag,links=LinkedProcLinks,hist=Hist}=LinkedProc,
+fwd_propag_normal(LinkedProc,{Procs,HistList,Pid})->
+    #proc{pid =LinkPid,flag=Flag,links=LinkedProcLinks,hist=Hist,mail=Mail}=LinkedProc,
     NewLinks=lists:delete(Pid,LinkedProcLinks),
     case cerl:concrete(Flag) of
       true->
         Time = ref_lookup(?FRESH_TIME),
         ref_add(?FRESH_TIME, Time + 1),
         MsgValue=cerl:abstract({'EXIT',cerl:concrete(Pid),normal}),
-        NewMsg = #msg{dest = LinkPid, val = MsgValue, time = Time},
         NewHist=[{signal,Pid}|Hist],
-        NewLinkedProc=LinkedProc#proc{links=NewLinks,hist=NewHist},
+        NewMail = [{MsgValue,Time}|Mail],
+        NewLinkedProc=LinkedProc#proc{links=NewLinks,hist=NewHist,mail=NewMail},
         HistVal={LinkPid,MsgValue,Time},
-        {[NewLinkedProc|Procs],[HistVal|HistList],[NewMsg|Msgs],Pid};
+        {[NewLinkedProc|Procs],[HistVal|HistList],Pid};
       _->
         NewHist=[{signal,Pid}|Hist],
         NewLinkedProc=LinkedProc#proc{links=NewLinks,hist=NewHist},
         HistVal={LinkPid,normal},
-        {[NewLinkedProc|Procs],[HistVal|HistList],Msgs,Pid}
+        {[NewLinkedProc|Procs],[HistVal|HistList],Pid}
     end.
 
 select_linked_procs(Procs,Links)->
@@ -594,8 +594,8 @@ pp_trace_spawn_link(From, To) ->
 pp_trace_flag(From,Val) ->
   [pp_pid(From)," set process flag to ",pp(Val)].
 
-pp_trace_propag(From, To,Val) ->
-  [pp_pid(From)," propagated "++atom_to_list(Val)++" to ",pp_links(To)].
+pp_trace_propag(From, To,[Type|_]) ->
+  [pp_pid(From)," propagated "++atom_to_list(Type)++" to ",pp_links(To)].
 
 pp_trace_receive(From, Val, Time) ->
   [pp_pid(From)," receives ",pp(Val)," (",integer_to_list(Time),")"].
@@ -764,6 +764,7 @@ has_send([_|RestHist], Time) -> has_send(RestHist, Time).
 
 has_spawn([], _) -> false;
 has_spawn([{spawn,_,_,Pid}|_], Pid) -> true;
+has_spawn([{spawn_link,_,_,Pid}|_], Pid) -> true;
 has_spawn([_|RestHist], Pid) -> has_spawn(RestHist, Pid).
 
 has_rec([], _) -> false;

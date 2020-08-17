@@ -4,6 +4,7 @@
 main()->
 	process_flag(trap_exit,true),
 	spawn_link(?MODULE,errorRaise,[]),
+	3/0,
 	startSupervision().
 
 errorRaise()->
@@ -14,7 +15,7 @@ errorRaise()->
 
 anotherWorker()->
 	spawn_link(?MODULE,loop,[]),
-	4/2.
+	3/0.
 
 loop()->
 	process_flag(trap_exit,true),

@@ -40,14 +40,13 @@ parseTrace(ListTrace,#trace{type=Type,from=From,to=To,val=Val,time=Time})->
 		?RULE_PROCESS_FLAG->
 			#trace{type=Type,from=pp(From),to=pp(From),val=pp(Val),time=Time};
 		?RULE_PROPAG->
-			io:fwrite("VAL: ~p~n",[Val]),
 			[T|Signals]=Val,
 			Rule="propag_"++atom_to_list(T),
 			SignalsTrace=[tracify(list_to_atom(Rule),From,Signal)||Signal<-Signals],
 			SignalsTrace++[#trace{type=exit,from=pp(From),to=pp(From)}]
 	end.
 tracify(Rule,From,{LinkPid,MsgValue,Time})->
-	#trace{type=Rule,from=pp(From),to=pp(LinkPid),val=pp(MsgValue)};
+	#trace{type=Rule,from=pp(From),to=pp(LinkPid),val=pp(MsgValue),time=Time};
 tracify(Rule,From,{LinkPid,error})->
 	#trace{type=Rule,from=pp(From),to=pp(LinkPid)};
 tracify(Rule,From,{LinkPid,normal})->
@@ -63,6 +62,8 @@ init()->%%initialize the tracer
 showingTrace(CollectorPid,LastTrace)->%%start receive message for handle the viewer
 	receive
 		{show,ListTrace} when is_list(ListTrace)->
+			io:fwrite("~p~n",[ListTrace]),
+			io:fwrite("-----------------------------~n"),
 			case ListTrace==LastTrace of %I compare the incoming list with the last list
 				true->% if they are the same except the last one and I don't change the graphics
 					showingTrace(CollectorPid,ListTrace);

@@ -36,7 +36,7 @@ eval_step(System, Pid) ->
       Acc={OldNotLinkedProcs,OldLinkedProcs,Msgs},
       {OldProcs,_,OldMsgs}=lists:foldl(fun utils:backPropagStep/2,Acc,Signals),
       OldProc=Proc#proc{links=OldLinks,hist=RestHist,env=OldEnv,exp=OldExp,mail=OldMail},
-      TraceItem = #trace{type = ?RULE_PROPAG,from = Pid,to =OldLinks,val=Type},
+      TraceItem = #trace{type = ?RULE_PROPAG,from = Pid,to =OldLinks,val=[Type|Signals]},
       OldTrace = lists:delete(TraceItem, Trace),
       System#sys{msgs=OldMsgs,procs=[OldProc|OldProcs],trace=OldTrace};
     {exit,OldEnv,OldExp,_}->

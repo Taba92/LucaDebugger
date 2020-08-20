@@ -13,8 +13,10 @@ select_opt(Sem, System, ?SCHED_RANDOM) ->
 select_opt(Sem, System, ?SCHED_PRIO_RANDOM) ->
    Opts =
    case Sem:eval_procs_opts(System) of
-      [] -> Sem:eval_sched_opts(System);
-      ProcsOpts -> ProcsOpts
+      [] when Sem==fwd_sem ->  Sem:eval_sched_opts(System)++Sem:eval_sig_opts(System);
+      []->Sem:eval_sched_opts(System);
+      ProcsOpts when Sem==fwd_sem-> ProcsOpts ++Sem:eval_sig_opts(System);
+      ProcsOpts->ProcsOpts
    end,
    select_rand(Opts).
 

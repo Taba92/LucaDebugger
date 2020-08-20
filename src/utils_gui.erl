@@ -37,6 +37,7 @@ get_label_from_option(Option) ->
     #opt{rule = ?RULE_SPAWN}   -> "Spawn";
     #opt{rule = ?RULE_SPAWN_LINK}   -> "SpawnLink";
     #opt{rule = ?RULE_SELF}    -> "Self";
+    #opt{rule = ?RULE_SIGNAL}    -> "Signal";
     #opt{rule = ?RULE_SCHED}   -> ?NULL_LABEL
   end.
 
@@ -47,6 +48,7 @@ get_rule_from_button(Button) ->
      "Propag"  -> ?RULE_PROPAG;
      "Flag"    -> ?RULE_PROCESS_FLAG;
      "Send"    -> ?RULE_SEND;
+     "Signal"  -> ?RULE_SIGNAL;
      "Receive" -> ?RULE_RECEIVE;
      "Spawn"   -> ?RULE_SPAWN;
      "SpawnLink" ->?RULE_SPAWN_LINK;
@@ -60,6 +62,8 @@ button_to_option(Button) ->
       #opt{sem = ?FWD_SEM, type = ?TYPE_PROC, rule = Rule};
     ?FORW_SCH_BUTTON ->
       #opt{sem = ?FWD_SEM, type = ?TYPE_MSG, rule = ?RULE_SCHED};
+    ?FORW_SIG_BUTTON ->
+      #opt{sem = ?FWD_SEM, type = ?TYPE_SIG, rule = ?RULE_SIGNAL};
     ?BACK_INT_BUTTON ->
       Rule = get_rule_from_button(Button),
       #opt{sem = ?BWD_SEM, type = ?TYPE_PROC, rule = Rule};
@@ -75,6 +79,7 @@ option_to_button_label(Option) ->
       ?FWD_SEM ->
         case Type of
           ?TYPE_MSG  -> ?FORW_SCH_BUTTON;
+          ?TYPE_SIG  -> ?FORW_SIG_BUTTON;
           ?TYPE_PROC -> ?FORW_INT_BUTTON
         end;
       ?BWD_SEM ->

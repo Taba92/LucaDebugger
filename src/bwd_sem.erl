@@ -17,10 +17,11 @@
 %%--------------------------------------------------------------------
 eval_step(System, Pid) ->
   Procs = System#sys.procs,
+  Signals=System#sys.signals,
   Msgs = System#sys.msgs,
   Trace = System#sys.trace,
   {Proc, RestProcs} = utils:select_proc(Procs, Pid),
-  #proc{pid = Pid,flag=Flag,links=Links,hist = [CurHist|RestHist]} = Proc,
+  #proc{pid = Pid,flag=Flag,links=Links,hist = [CurHist|RestHist],mail=Mail} = Proc,
   case CurHist of
     {tau, OldEnv, OldExp} ->
       OldProc = Proc#proc{hist = RestHist, env = OldEnv, exp = OldExp},
@@ -30,15 +31,32 @@ eval_step(System, Pid) ->
       TraceItem = #trace{type = ?RULE_PROCESS_FLAG,from = Pid,val=Flag},
       OldTrace = lists:delete(TraceItem, Trace),
       System#sys{msgs = Msgs,procs=[OldProc|RestProcs],trace=OldTrace};
-    {propag,OldEnv,OldExp,OldMail,Type,Signals}->
-      OldLinks=[element(1,Signal)||Signal<-Signals],
-      {OldLinkedProcs,OldNotLinkedProcs}=utils:select_linked_procs(RestProcs,OldLinks),
-      Acc={OldNotLinkedProcs,OldLinkedProcs,Msgs},
-      {OldProcs,_,OldMsgs}=lists:foldl(fun utils:backPropagStep/2,Acc,Signals),
+    {propag,OldEnv,OldExp,OldMail,_,HistSignals}->
+      OldLinks=[element(1,HistSignal)||HistSignal<-HistSignals],
+      Acc={Signals,Pid},
+      {OldSignals,_}=lists:foldl(fun utils:bwd_propag/2,Acc,HistSignals),
       OldProc=Proc#proc{links=OldLinks,hist=RestHist,env=OldEnv,exp=OldExp,mail=OldMail},
-      TraceItem = #trace{type = ?RULE_PROPAG,from = Pid,to =OldLinks,val=[Type|Signals]},
-      OldTrace = lists:delete(TraceItem, Trace),
-      System#sys{msgs=OldMsgs,procs=[OldProc|OldProcs],trace=OldTrace};
+      OldTrace = [Track||Track<-Trace,element(2,Track)/=?RULE_PROPAG],
+      System#sys{msgs=Msgs,signals=OldSignals,procs=[OldProc|RestProcs],trace=OldTrace};
+    {signal,From,error,OldEnv,OldExp,OldMail,Time}->
+      Reason=element(2,cerl:concrete(Proc#proc.exp)),
+      OldProc=Proc#proc{links=[From|Links],hist=RestHist,env=OldEnv,exp=OldExp,mail=OldMail},
+      OldSignal=#signal{dest=Pid,from=From,type=error,reason=Reason,time=Time},
+      System#sys{signals=[OldSignal|Signals],procs=[OldProc|RestProcs]};
+    {signal,From,error,Reason,Time}->
+      OldMail=[M||M<-Mail,element(2,M)/=Time],
+      OldProc=Proc#proc{links=[From|Links],hist=RestHist,mail=OldMail},
+      OldSignal=#signal{dest=Pid,from=From,type=error,reason=Reason,time=Time},
+      System#sys{signals=[OldSignal|Signals],procs=[OldProc|RestProcs]};
+    {signal,From,true,normal,Time}->
+      OldMail=[M||M<-Mail,element(2,M)/=Time],
+      OldProc=Proc#proc{links=[From|Links],hist=RestHist,mail=OldMail},
+      OldSignal=#signal{dest=Pid,from=From,type=normal,time=Time},
+      System#sys{signals=[OldSignal|Signals],procs=[OldProc|RestProcs]};
+    {signal,From,false,normal,Time}->
+      OldProc=Proc#proc{links=[From|Links],hist=RestHist},
+      OldSignal=#signal{dest=Pid,from=From,type=normal,time=Time},
+      System#sys{signals=[OldSignal|Signals],procs=[OldProc|RestProcs]};
     {exit,OldEnv,OldExp,_}->
       OldProc=Proc#proc{hist=RestHist,env=OldEnv,exp=OldExp},
       System#sys{msgs = Msgs,procs=[OldProc|RestProcs]};
@@ -114,9 +132,10 @@ eval_sched_opts(#sys{procs = Procs}) ->
 
 eval_procs_opts(System) ->
   Procs = System#sys.procs,
+  Signals=System#sys.signals,
   Msgs = System#sys.msgs,
   ProcPairs = [utils:select_proc(Procs, Proc#proc.pid) || Proc <- Procs ],
-  Opts = [eval_proc_opt(#sys{msgs = Msgs, procs = RestProcs}, Proc) ||  {Proc, RestProcs} <- ProcPairs],
+  Opts = [eval_proc_opt(#sys{msgs = Msgs,signals=Signals,procs = RestProcs}, Proc) ||  {Proc, RestProcs} <- ProcPairs],
   lists:filter( fun (X) ->
                   case X of
                     ?NULL_OPT -> false;
@@ -126,6 +145,7 @@ eval_procs_opts(System) ->
 
 eval_proc_opt(RestSystem, CurProc) ->
   RestProcs = RestSystem#sys.procs,
+  Signals=RestSystem#sys.signals,
   Msgs = RestSystem#sys.msgs,
   Hist = CurProc#proc.hist,
   Rule =
@@ -138,12 +158,11 @@ eval_proc_opt(RestSystem, CurProc) ->
           {process_flag,_,_,_} ->  ?RULE_PROCESS_FLAG;
           {exit,_,_,_}->?RULE_SEQ;
           {error,_,_,_}->?RULE_SEQ;
-          {signal,_,_,_,_}->?NULL_RULE;
-          {signal,_}->?NULL_RULE;
-          {propag,_,_,_,_,Signals}->
-            Id=CurProc#proc.pid,
-            Acc={RestProcs,Msgs,Id,true},
-            {_,_,_,Bool}=lists:foldl(fun utils:checkBackPropag/2,Acc,Signals),
+          {signal,_,_,_,_,_,_}->?RULE_SIGNAL;
+          {signal,_,_,_,_}->?RULE_SIGNAL;
+          {propag,_,_,_,_,HistSig}->
+            Acc={Signals,CurProc#proc.pid,true},
+            {_,_,Bool}=lists:foldl(fun utils:check_bwd_propag/2,Acc,HistSig),
             case Bool of
               true->?RULE_PROPAG;
               false->?NULL_RULE

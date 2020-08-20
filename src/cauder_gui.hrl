@@ -33,8 +33,9 @@
 
 -define(FORW_INT_BUTTON,     410).
 -define(FORW_SCH_BUTTON,     411).
--define(BACK_INT_BUTTON,     412).
--define(BACK_SCH_BUTTON,     413).
+-define(FORW_SIG_BUTTON,     412).
+-define(BACK_INT_BUTTON,     413).
+-define(BACK_SCH_BUTTON,     414).
 
 -define(FORWARD_BUTTON,    422).
 -define(BACKWARD_BUTTON,   423).

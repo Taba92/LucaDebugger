@@ -14,6 +14,7 @@
 -define(BWD_SEM, bwd_sem).
 
 -define(TYPE_MSG,  msg).
+-define(TYPE_SIG, sig).
 -define(TYPE_PROC, proc).
 
 -define(RULE_SEQ,      seq).
@@ -26,6 +27,7 @@
 -define(RULE_SPAWN_LINK,    spawn_link).
 -define(RULE_SELF,     self).
 -define(RULE_SCHED,    sched).
+-define(RULE_SIGNAL,    signal).
 
 % ets defs
 -define(APP_REF, '_._app').
@@ -78,8 +80,15 @@
               val,
               time}).
 
+-record(signal,{dest,
+                from,
+                type,
+                reason,
+                time}).
+
 -record(sys, {sched = ?SCHED_PRIO_RANDOM,
               msgs  = [],
+              signals =[],
               procs = [],
               trace = [],
               roll  = []}).

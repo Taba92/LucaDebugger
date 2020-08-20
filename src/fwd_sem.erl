@@ -6,8 +6,8 @@
 %%%-------------------------------------------------------------------
 
 -module(fwd_sem).
--export([eval_step/2, eval_sched/2,
-         eval_opts/1, eval_procs_opts/1, eval_sched_opts/1]).
+-export([eval_step/2,eval_signal/2,eval_sched/2,
+         eval_opts/1, eval_procs_opts/1,eval_sig_opts/1, eval_sched_opts/1]).
 
 -include("cauder.hrl").
 
@@ -348,6 +348,7 @@ replace_guards(Bindings,Exps) ->
 %%--------------------------------------------------------------------
 eval_step(System, Pid) ->
   Msgs = System#sys.msgs,
+  Signals=System#sys.signals,
   Procs = System#sys.procs,
   Trace = System#sys.trace,
   {Proc, RestProcs} = utils:select_proc(Procs, Pid),
@@ -355,54 +356,49 @@ eval_step(System, Pid) ->
   NewSystem=
   case is_exp(Exp) of
       false->%%fine codice o uscita anomala,inizio a guardare i link del processo morente
-        {LinkedProcs,NotLinkedProcs}=utils:select_linked_procs(RestProcs,Links),
         case cerl:concrete(Exp) of
-          {error,_,stack}->
-            Type=error,
-            Acc={NotLinkedProcs,[],Pid,Exp},
-            {NewProcs,HistVal,_,_}=lists:foldl(fun utils:fwd_propag_err/2,Acc,LinkedProcs);
+          {error,Reason,stack}->
+            Acc={Signals,Pid,[],error,Reason},
+            {NewSignals,_,HistVal,Type,_}=lists:foldl(fun utils:fwd_propag/2,Acc,Links);
           {exit,Reason}when Reason/=normal->
-          Type=error,
-            Acc={NotLinkedProcs,[],Msgs,Pid,Exp},
-            {NewProcs,HistVal,_,_}=lists:foldl(fun utils:fwd_propag_err/2,Acc,LinkedProcs);
+            Acc={Signals,Pid,[],error,Reason},
+            {NewSignals,_,HistVal,Type,_}=lists:foldl(fun utils:fwd_propag/2,Acc,Links);
           {exit,normal}->
-            Type=normal,
-            Acc={NotLinkedProcs,[],Msgs,Pid},
-            {NewProcs,HistVal,_}=lists:foldl(fun utils:fwd_propag_normal/2,Acc,LinkedProcs);
+            Acc={Signals,Pid,[],normal},
+            {NewSignals,_,HistVal,Type}=lists:foldl(fun utils:fwd_propag/2,Acc,Links);
           _->%%terminazione normale del codice
-            Type=normal,
-            Acc={NotLinkedProcs,[],Msgs,Pid},
-            {NewProcs,HistVal,_}=lists:foldl(fun utils:fwd_propag_normal/2,Acc,LinkedProcs)
+            Acc={Signals,Pid,[],normal},
+            {NewSignals,_,HistVal,Type}=lists:foldl(fun utils:fwd_propag/2,Acc,Links)
         end,
         NewProc=Proc#proc{links=[],hist=[{propag,Env,Exp,Mail,Type,HistVal}|Hist]},%"uccidi" il processo,rompendo tutti i link
-        TraceItem = #trace{type = ?RULE_PROPAG,from = Pid,to=Links,val=[Type|HistVal]},
+        TraceItem = #trace{type = ?RULE_PROPAG,from = Pid,to=Links,val=HistVal},
         NewTrace = [TraceItem|Trace],
-        System#sys{procs=[NewProc|NewProcs],trace=NewTrace};
+        System#sys{procs=[NewProc|RestProcs],signals=NewSignals,trace=NewTrace};
       true->
         {NewEnv, NewExp, Label} = eval_seq(Env,Flag,Exp),
         case Label of
         tau ->
           NewProc = Proc#proc{hist = [{tau,Env,Exp}|Hist], env = NewEnv, exp = NewExp},
-          System#sys{msgs = Msgs, procs = [NewProc|RestProcs]};
+          System#sys{msgs = Msgs,signals=Signals, procs = [NewProc|RestProcs]};
         {process_flag,NewFlag}->
           NewHist=[{process_flag,Env,Exp,Flag}|Hist],
           NewProc=Proc#proc{flag=NewFlag,hist=NewHist,env=NewEnv,exp=NewExp},
           TraceItem = #trace{type = ?RULE_PROCESS_FLAG,from = Pid,val=NewFlag},
           NewTrace = [TraceItem|Trace],
-          System#sys{msgs = Msgs,procs=[NewProc|RestProcs], trace = NewTrace};
+          System#sys{msgs = Msgs,signals=Signals,procs=[NewProc|RestProcs], trace = NewTrace};
         {exit,Reason}->
           NewHist=[{exit,Env,Exp,Reason}|Hist],
           NewProc=Proc#proc{hist=NewHist,exp=cerl:abstract({exit,Reason})},
-          System#sys{msgs = Msgs,procs=[NewProc|RestProcs]};
+          System#sys{msgs = Msgs,signals=Signals,procs=[NewProc|RestProcs]};
         {error,Reason}->
           NewHist=[{error,Env,Exp,Reason}|Hist],
           NewProc=Proc#proc{hist=NewHist,exp=cerl:abstract({error,Reason,stack})},
-          System#sys{msgs = Msgs,procs=[NewProc|RestProcs]};
+          System#sys{msgs = Msgs,signals=Signals,procs=[NewProc|RestProcs]};
         {self, Var} ->
           NewHist = [{self, Env, Exp}|Hist],
           RepExp = utils:replace(Var, Pid, NewExp),
           NewProc = Proc#proc{hist = NewHist, env = NewEnv, exp = RepExp},
-          System#sys{msgs = Msgs, procs = [NewProc|RestProcs]};
+          System#sys{msgs = Msgs, signals=Signals,procs = [NewProc|RestProcs]};
         {send, DestPid, MsgValue} ->
           Time = ref_lookup(?FRESH_TIME),
           ref_add(?FRESH_TIME, Time + 1),
@@ -412,7 +408,7 @@ eval_step(System, Pid) ->
           NewProc = Proc#proc{hist = NewHist, env = NewEnv, exp = NewExp},
           TraceItem = #trace{type = ?RULE_SEND, from = Pid, to = DestPid, val = MsgValue, time = Time},
           NewTrace = [TraceItem|Trace],
-          System#sys{msgs = NewMsgs, procs = [NewProc|RestProcs], trace = NewTrace};
+          System#sys{msgs = NewMsgs,signals=Signals, procs = [NewProc|RestProcs], trace = NewTrace};
         {spawn, {Var, FunName, FunArgs}} ->
           PidNum = ref_lookup(?FRESH_PID),
           ref_add(?FRESH_PID, PidNum + 1),
@@ -428,7 +424,7 @@ eval_step(System, Pid) ->
           NewProc = Proc#proc{hist = NewHist,env = NewEnv, exp = RepExp},
           TraceItem = #trace{type = ?RULE_SPAWN, from = Pid, to = SpawnPid},
           NewTrace = [TraceItem|Trace],
-          System#sys{msgs = Msgs, procs = [NewProc|[SpawnProc|RestProcs]], trace = NewTrace};
+          System#sys{msgs = Msgs,signals=Signals, procs = [NewProc|[SpawnProc|RestProcs]], trace = NewTrace};
         {spawn_link, {Var, FunName, FunArgs}} ->
           PidNum = ref_lookup(?FRESH_PID),
           ref_add(?FRESH_PID, PidNum + 1),
@@ -446,7 +442,7 @@ eval_step(System, Pid) ->
           NewProc = Proc#proc{hist = NewHist,links=NewLinks,env = NewEnv, exp = RepExp},
           TraceItem = #trace{type = ?RULE_SPAWN_LINK, from = Pid, to = SpawnPid},%%aggiungere la macro ?RULE_SPAWN_LINK
           NewTrace = [TraceItem|Trace],
-          System#sys{msgs = Msgs, procs = [NewProc|[SpawnProc|RestProcs]], trace = NewTrace};
+          System#sys{msgs = Msgs,signals=Signals, procs = [NewProc|[SpawnProc|RestProcs]], trace = NewTrace};
         {rec, Var, ReceiveClauses} ->
           {Bindings, RecExp, ConsMsg, NewMail} = matchrec(ReceiveClauses, Mail, NewEnv),
           UpdatedEnv = utils:merge_env(NewEnv, Bindings),
@@ -456,10 +452,19 @@ eval_step(System, Pid) ->
           {MsgValue, Time} = ConsMsg, 
           TraceItem = #trace{type = ?RULE_RECEIVE, from = Pid, val = MsgValue, time = Time},
           NewTrace = [TraceItem|Trace],
-          System#sys{msgs = Msgs, procs = [NewProc|RestProcs], trace = NewTrace}
+          System#sys{msgs = Msgs,signals=Signals, procs = [NewProc|RestProcs], trace = NewTrace}
       end
     end,
   NewSystem.
+
+eval_signal(System,Id)->
+  Procs = System#sys.procs,
+  Signals = System#sys.signals,
+  {Signal,RestSignals}=utils:select_signal(Signals,Id),
+  LinkPid=Signal#signal.dest,
+  {Proc,RestProcs}=utils:select_proc(Procs,LinkPid),
+  NewProc=utils:deliver_signal(Proc,Signal),
+  System#sys{signals=RestSignals,procs=[NewProc|RestProcs]}.
 
 %%--------------------------------------------------------------------
 %% @doc Performs an evaluation step in message Id, given System
@@ -543,7 +548,24 @@ preprocessing_clauses(Clauses,Msg,Env) ->
 eval_opts(System) ->
   SchedOpts = eval_sched_opts(System),
   ProcsOpts = eval_procs_opts(System),
-  SchedOpts ++ ProcsOpts.
+  SigOpts=eval_sig_opts(System),
+  SchedOpts ++SigOpts++ ProcsOpts.
+
+eval_sig_opts(#sys{signals=[]})->
+  [];
+eval_sig_opts(#sys{signals=[CurSig|RestSig],procs=Procs})-> 
+  DestPid=CurSig#signal.dest,
+  DestProcs = [ P || P <- Procs, P#proc.pid == DestPid],
+  case DestProcs of
+    [] ->eval_sig_opts(#sys{signals = RestSig, procs = Procs});
+    [Proc]->
+      case is_exp(Proc#proc.exp) of
+        true->
+          Time = CurSig#signal.time,
+          [#opt{sem = ?MODULE, type = ?TYPE_SIG, id = Time, rule = ?RULE_SIGNAL}|eval_sig_opts(#sys{signals = RestSig, procs = Procs})];
+        false->eval_sig_opts(#sys{signals = RestSig, procs = Procs})
+      end
+  end.
 
 eval_sched_opts(#sys{msgs = []}) ->
   [];

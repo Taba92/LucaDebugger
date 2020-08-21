@@ -36,7 +36,7 @@ eval_step(System, Pid) ->
       Acc={Signals,Pid},
       {OldSignals,_}=lists:foldl(fun utils:bwd_propag/2,Acc,HistSignals),
       OldProc=Proc#proc{links=OldLinks,hist=RestHist,env=OldEnv,exp=OldExp,mail=OldMail},
-      OldTrace = [Track||Track<-Trace,element(2,Track)/=?RULE_PROPAG],
+      OldTrace = [Track||Track<-Trace,Track#trace.type/=?RULE_PROPAG orelse Track#trace.from/=Pid],
       System#sys{msgs=Msgs,signals=OldSignals,procs=[OldProc|RestProcs],trace=OldTrace};
     {signal,From,error,OldEnv,OldExp,OldMail,Time}->
       Reason=element(2,cerl:concrete(Proc#proc.exp)),

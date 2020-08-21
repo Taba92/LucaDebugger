@@ -5,7 +5,7 @@
 
 -module(utils).
 -export([fwd_propag/2,deliver_signal/2,bwd_propag/2,check_bwd_propag/2,
-          fundef_lookup/2, fundef_rename/1, substitute/2,
+          is_not_a_signal_message/3,fundef_lookup/2, fundef_rename/1, substitute/2,
          build_var/1, build_var/2, pid_exists/2,
          select_proc/2, select_msg/2,select_signal/2,
          select_proc_with_time/2, select_proc_with_send/2,
@@ -192,6 +192,19 @@ deliver_signal(Proc,#signal{from=From,type=normal,time=Time})->
   end,
   NewProc.
 
+is_not_a_signal_message(Msg,[SignalHist|RestHist],Bool)when (element(1,SignalHist))==signal->
+  {_,TimeMsg}=Msg,
+  Time=element(tuple_size(SignalHist),SignalHist),%prendo l'ultimo elemento della tupla
+  case TimeMsg == Time of
+      true->
+        is_not_a_signal_message(Msg,RestHist,Bool and false);
+      false->
+        is_not_a_signal_message(Msg,RestHist,Bool and true)
+  end;
+is_not_a_signal_message(Msg,[_|RestHist],Bool)->
+  is_not_a_signal_message(Msg,RestHist,Bool and true);
+is_not_a_signal_message(_,[],Bool)->Bool.
+    
 %%fine aggiunte luca
 
 %%--------------------------------------------------------------------

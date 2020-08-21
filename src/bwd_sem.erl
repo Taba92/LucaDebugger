@@ -207,17 +207,19 @@ eval_proc_opt(RestSystem, CurProc) ->
 
 eval_sched_opt(Proc) ->
   #proc{hist = Hist, mail = Mail} = Proc,
+  NewMail=[M||M<-Mail,utils:is_not_a_signal_message(M,Hist,true)],
+  %NewMail=Mail,
   Rule =
-    case Mail of
+    case NewMail of
       [] -> ?NULL_RULE;
       _ ->
-        {LastMsg,_} = utils:last_msg_rest(Mail),
+        {LastMsg,_} = utils:last_msg_rest(NewMail),
         {_,Time} = LastMsg,
         TopRec = utils:topmost_rec(Hist),
         case TopRec of
           no_rec -> {?RULE_SCHED, Time};
           {rec,_,_,OldMsg,OldMail} ->
-            case utils:is_queue_minus_msg(OldMail, OldMsg, Mail) of
+            case utils:is_queue_minus_msg(OldMail, OldMsg, NewMail) of
               false -> {?RULE_SCHED, Time};
               true -> ?NULL_RULE
             end

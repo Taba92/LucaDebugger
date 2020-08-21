@@ -20,8 +20,6 @@ can_roll(#sys{procs = Procs}, Pid) ->
       Mail = Proc#proc.mail,
       case {Hist, Mail} of
         {[], []} -> false;
-        {[{signal,_}|_], []} -> false;
-        {[{signal,_,_,_,_,_}|_], []} -> false;
         _ -> true
       end
   end.
@@ -56,38 +54,20 @@ eval_step(System, Pid) ->
       cauder:eval_step(System, hd(RollOpts))
   end.
 
-roll_signal({LinkPid,error},{System,Pid})->
-  {LinkProc,_}=utils:select_proc(System#sys.procs,LinkPid),
-  [CurHist|_]=LinkProc#proc.hist,
-  case CurHist of
-        {signal,_,_,_,Pid}->{System,Pid};
-        _->{eval_step(System,LinkPid),Pid}
+roll_signal({LinkPid,error,Reason,Time},{System,Pid})->
+  Signal=#signal{dest=LinkPid,from=Pid,type=error,reason=Reason,time=Time},
+  case lists:member(Signal,System#sys.signals) of
+      true->{System,Pid};
+      _->NewSystem=eval_step(System,LinkPid),
+        roll_signal({LinkPid,error,Reason,Time},{NewSystem,Pid})
   end;
-roll_signal({LinkPid,normal},{System,Pid})->
-  {LinkProc,_}=utils:select_proc(System#sys.procs,LinkPid),
-  [CurHist|_]=LinkProc#proc.hist,
-  case CurHist of
-        {signal,Pid}->{System,Pid};
-        _->NewSystem=eval_step(System,LinkPid),
-          roll_signal({LinkPid,normal},{NewSystem,Pid})
-  end;
-roll_signal({LinkPid,MsgValue,Time},{System,Pid})->
-  {LinkProc,_}=utils:select_proc(System#sys.procs,LinkPid),
-  [CurHist|_]=LinkProc#proc.hist,
-  case CurHist of
-        {signal,Pid}->
-          SchedOpts = [ X || X <- roll_sched_opts(System,LinkPid),X#opt.id == Time],%%si chiede se il messaggio è nella local mailbox del processo a cui è stato inviato
-          case SchedOpts of
-            [] ->%% se non c'è
-              {System,Pid};
-            _ ->%%se c'è il messaggio
-                NewSystem = cauder:eval_step(System, hd(SchedOpts)),
-               roll_signal({LinkPid,MsgValue,Time},{NewSystem,Pid})
-          end;
-        _->NewSystem=eval_step(System,LinkPid),
-          roll_signal({LinkPid,MsgValue,Time},{NewSystem,Pid})
+roll_signal({LinkPid,normal,Time},{System,Pid})->
+  Signal=#signal{dest=LinkPid,from=Pid,type=normal,time=Time},
+  case lists:member(Signal,System#sys.signals) of
+      true->{System,Pid};
+      _->NewSystem=eval_step(System,LinkPid),
+        roll_signal({LinkPid,normal,Time},{NewSystem,Pid})
   end.
-
 
 roll_send(System, Pid, OtherPid, Time) ->
   %%si chiede se può far tornare indietro la send direttamente,assieme al case

@@ -5,7 +5,7 @@
 
 -module(utils).
 -export([fwd_propag/2,deliver_signal/2,bwd_propag/2,check_bwd_propag/2,
-          is_not_a_signal_message/3,fundef_lookup/2, fundef_rename/1, substitute/2,
+          is_not_a_signal_message/3,is_signal_msg_top/2,fundef_lookup/2, fundef_rename/1, substitute/2,
          build_var/1, build_var/2, pid_exists/2,
          select_proc/2, select_msg/2,select_signal/2,
          select_proc_with_time/2, select_proc_with_send/2,
@@ -18,7 +18,7 @@
          filter_options/2, filter_procs_opts/1,
          has_fwd/1, has_bwd/1, has_norm/1, has_var/2,
          is_queue_minus_msg/3, topmost_rec/1, last_msg_rest/1,
-         gen_log_send/4, gen_log_spawn/2, empty_log/1, must_focus_log/1,
+         gen_log_send/4, gen_log_spawn/2,gen_log_spawn_link/2,gen_log_propag/2,empty_log/1, must_focus_log/1,
          extract_replay_data/1, extract_pid_log_data/2, get_mod_name/1]).
 
 -include("cauder.hrl").
@@ -205,6 +205,15 @@ is_not_a_signal_message(Msg,[_|RestHist],Bool)->
   is_not_a_signal_message(Msg,RestHist,Bool and true);
 is_not_a_signal_message(_,[],Bool)->Bool.
     
+
+is_signal_msg_top({signal,From,error,Reason,Time},#proc{mail=Mail})->
+  MsgValue=cerl:abstract({'EXIT',cerl:concrete(From),Reason}),
+  Msg={MsgValue,Time},
+  lists:last(Mail)==Msg;
+is_signal_msg_top({signal,From,true,normal,Time},#proc{mail=Mail})->
+  MsgValue=cerl:abstract({'EXIT',cerl:concrete(From),normal}),
+  Msg={MsgValue,Time},
+  lists:last(Mail)==Msg.
 %%fine aggiunte luca
 
 %%--------------------------------------------------------------------
@@ -504,11 +513,17 @@ pp_hist_2({process_flag,_,_,Flag}) ->
 pp_hist_2({propag,_,_,_,_,HistVal}) ->
   String=lists:foldl(fun stringify/2,"",HistVal),
   [[],LinksString]=string:split(String,","),
-  "propag(" ++ [{?CAUDER_GREEN, LinksString}] ++ ")";
-pp_hist_2({signal,FromPid,_,_,_}) ->
-  "signal(" ++ [{?CAUDER_GREEN, pp(FromPid)}] ++ ")";
-pp_hist_2({signal,FromPid,_,_,_,_,_}) ->
-  "signal(" ++ [{?CAUDER_GREEN, pp(FromPid)}] ++ ")".
+  Type=element(2,hd(HistVal)),
+  case Type of
+    normal->"propag_normal(" ++ [{?CAUDER_GREEN, LinksString}] ++ ")";
+    error->
+      Reason=element(3,hd(HistVal)),
+      "propag_error{"++atom_to_list(Reason)++"(" ++ [{?CAUDER_GREEN, LinksString}] ++ ")}"
+    end;
+pp_hist_2({signal,FromPid,_,_,Time}) ->
+  "got_signal(" ++ [{?CAUDER_GREEN, pp(FromPid)}] ++","++integer_to_list(Time)++")";
+pp_hist_2({signal,FromPid,_,_,_,_,Time}) ->
+  "got_signal(" ++ [{?CAUDER_GREEN, pp(FromPid)}] ++","++integer_to_list(Time)++ ")".
 
 stringify(HistLink,Acc)->
   PidString=pp(element(1,HistLink)),
@@ -566,6 +581,7 @@ pp_trace_item(#trace{type = Type,
     ?RULE_SPAWN_LINK   -> pp_trace_spawn_link(From, To);
     ?RULE_RECEIVE -> pp_trace_receive(From, Val, Time);
     ?RULE_PROCESS_FLAG -> pp_trace_flag(From,Val);
+    ?RULE_SIGNAL -> pp_trace_signal(From,Val,To,Time);
     ?RULE_PROPAG -> pp_trace_propag(From, To,Val)
   end.
 
@@ -581,9 +597,19 @@ pp_trace_spawn_link(From, To) ->
 pp_trace_flag(From,Val) ->
   [pp_pid(From)," set process flag to ",pp(Val)].
 
+pp_trace_signal(From,{Type,Reason},To,Time) when Type==error ->
+  [pp_pid(To)," get signal {"++atom_to_list(Type)++","++atom_to_list(Reason)++"}"++" from " ++pp_pid(From)," (",integer_to_list(Time),")"];
+pp_trace_signal(From,{Type,_},To,Time)->
+  [pp_pid(To)," get signal {"++atom_to_list(Type)++"}"++" from " ++pp_pid(From)," (",integer_to_list(Time),")"].
+
 pp_trace_propag(From, To,HistVal) ->
   Type=element(2,hd(HistVal)),
-  [pp_pid(From)," propagated "++atom_to_list(Type)++" to ",pp_links(To)].
+  case Type of
+    normal->[pp_pid(From)," propagated {"++atom_to_list(Type)++"} to ",pp_links(To)];
+    error->
+      Reason=element(3,hd(HistVal)),
+      [pp_pid(From)," propagated {"++atom_to_list(Type)++","++atom_to_list(Reason)++"} to ",pp_links(To)]
+    end.
 
 pp_trace_receive(From, Val, Time) ->
   [pp_pid(From)," receives ",pp(Val)," (",integer_to_list(Time),")"].
@@ -790,6 +816,25 @@ gen_log_send(Pid, OtherPid, MsgValue, Time) ->
 gen_log_spawn(_Pid, OtherPid) ->
   % [["Roll SPAWN of ",pp_pid(OtherPid)," from ",pp_pid(Pid)]].
   [["Roll spawn of ",pp_pid(OtherPid)]].
+
+gen_log_spawn_link(_Pid, OtherPid) ->
+  % [["Roll SPAWN of ",pp_pid(OtherPid)," from ",pp_pid(Pid)]].
+  [["Roll spawn_link of ",pp_pid(OtherPid)]].
+
+gen_log_propag(Pid,Signals)->
+  OldLinks=[element(1,HistSignal)||HistSignal<-Signals],
+  Acc={Pid,""},
+  {_,LogSignals}=lists:foldl(fun gen_log_signal/2,Acc,Signals),
+  case hd(Signals) of
+    {_,error,Reason,_}->
+      [[LogSignals++"Roll propagation {error,"++atom_to_list(Reason)++"} to ",pp_links(OldLinks)]];
+    _->[[LogSignals++"Roll propagation {normal} to ",pp_links(OldLinks)]]
+  end.
+
+gen_log_signal({LinkPid,error,_,_},{Pid,Acc})->
+  {Pid,Acc++"Roll signal error from Proc "++pp(Pid)++" to "++pp_pid(LinkPid)++"\n"};
+gen_log_signal({LinkPid,normal,_},{Pid,Acc})->
+  {Pid,Acc++"Roll signal normal from Proc "++pp(Pid)++" to "++pp_pid(LinkPid)++"\n"}.
 
 empty_log(System) ->
   System#sys{roll = []}.

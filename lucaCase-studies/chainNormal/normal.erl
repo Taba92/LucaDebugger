@@ -2,7 +2,7 @@
 -export([main/0,spawnNorm/1]).
 
 main()->
-	%process_flag(trap_exit,true),
+	process_flag(trap_exit,true),
 	spawn_link(?MODULE,spawnNorm,[0]),
 	self().
 

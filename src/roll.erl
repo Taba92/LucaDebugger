@@ -40,12 +40,15 @@ eval_step(System, Pid) ->
       ?LOG("ROLLing back SPAWN of " ++ ?TO_STRING(cerl:concrete(SpawnPid))),
       roll_spawn(LogSystem, Pid, SpawnPid);
     {spawn_link, _, _, SpawnPid} ->
-      NewLog = System#sys.roll ++ utils:gen_log_spawn(Pid, SpawnPid),
+      NewLog = System#sys.roll ++ utils:gen_log_spawn_link(Pid, SpawnPid),
       LogSystem = System#sys{roll = NewLog},
       ?LOG("ROLLing back SPAWN_LINK of " ++ ?TO_STRING(cerl:concrete(SpawnPid))),
       roll_spawn_link(LogSystem, Pid, SpawnPid);
-    {propag,_,_,_,_,Signals}->   
-      Acc={System,Pid},
+    {propag,_,_,_,_,Signals}->
+      NewLog = System#sys.roll ++ utils:gen_log_propag(Pid,Signals),
+      LogSystem = System#sys{roll = NewLog},
+      ?LOG("ROLLing back PROPAGATION to " ++ ?TO_STRING(cerl:concrete(SpawnPid))),
+      Acc={LogSystem,Pid},
       {NewSystem,_}=lists:foldl(fun roll_signal/2,Acc,Signals),
       RollOpts = roll_opts(NewSystem, Pid),
       cauder:eval_step(NewSystem, hd(RollOpts));
@@ -74,7 +77,7 @@ roll_send(System, Pid, OtherPid, Time) ->
   SendOpts = lists:filter(fun (X) -> X#opt.rule == ?RULE_SEND end,roll_opts(System, Pid)),
   case SendOpts of
     [] ->%%se la send non può essere fatta tornare indietro direttamente
-      SchedOpts = [ X || X <- roll_sched_opts(System, OtherPid),X#opt.id == Time],%%si chiede se il messaggio è nella local mailbox del processo a cui è stato inviato
+      SchedOpts = [ X || X <- roll_sched_opts(System, OtherPid),X#opt.id == Time],%%si chiede se il messaggio può essere reversato
       case SchedOpts of
         [] ->%% se non c'è
           NewSystem = eval_step(System, OtherPid),

@@ -40,23 +40,31 @@ eval_step(System, Pid) ->
       System#sys{msgs=Msgs,signals=OldSignals,procs=[OldProc|RestProcs],trace=OldTrace};
     {signal,From,error,OldEnv,OldExp,OldMail,Time}->
       Reason=element(2,cerl:concrete(Proc#proc.exp)),
+      TraceItem = #trace{type = ?RULE_SIGNAL, from = From, val = {error,Reason},to=Pid,time=Time},
+      OldTrace = lists:delete(TraceItem, Trace),
       OldProc=Proc#proc{links=[From|Links],hist=RestHist,env=OldEnv,exp=OldExp,mail=OldMail},
       OldSignal=#signal{dest=Pid,from=From,type=error,reason=Reason,time=Time},
-      System#sys{signals=[OldSignal|Signals],procs=[OldProc|RestProcs]};
+      System#sys{signals=[OldSignal|Signals],procs=[OldProc|RestProcs],trace=OldTrace};
     {signal,From,error,Reason,Time}->
       OldMail=[M||M<-Mail,element(2,M)/=Time],
+      TraceItem = #trace{type = ?RULE_SIGNAL, from = From, val = {error,Reason},to=Pid,time=Time},
+      OldTrace = lists:delete(TraceItem, Trace),
       OldProc=Proc#proc{links=[From|Links],hist=RestHist,mail=OldMail},
       OldSignal=#signal{dest=Pid,from=From,type=error,reason=Reason,time=Time},
-      System#sys{signals=[OldSignal|Signals],procs=[OldProc|RestProcs]};
+      System#sys{signals=[OldSignal|Signals],procs=[OldProc|RestProcs],trace=OldTrace};
     {signal,From,true,normal,Time}->
       OldMail=[M||M<-Mail,element(2,M)/=Time],
+      TraceItem = #trace{type = ?RULE_SIGNAL, from = From, val = {normal,undefined},to=Pid,time=Time},
+      OldTrace = lists:delete(TraceItem, Trace),
       OldProc=Proc#proc{links=[From|Links],hist=RestHist,mail=OldMail},
       OldSignal=#signal{dest=Pid,from=From,type=normal,time=Time},
-      System#sys{signals=[OldSignal|Signals],procs=[OldProc|RestProcs]};
+      System#sys{signals=[OldSignal|Signals],procs=[OldProc|RestProcs],trace=OldTrace};
     {signal,From,false,normal,Time}->
       OldProc=Proc#proc{links=[From|Links],hist=RestHist},
+      TraceItem = #trace{type = ?RULE_SIGNAL, from = From, val = {normal,undefined},to=Pid,time=Time},
+      OldTrace = lists:delete(TraceItem, Trace),
       OldSignal=#signal{dest=Pid,from=From,type=normal,time=Time},
-      System#sys{signals=[OldSignal|Signals],procs=[OldProc|RestProcs]};
+      System#sys{signals=[OldSignal|Signals],procs=[OldProc|RestProcs],trace=OldTrace};
     {exit,OldEnv,OldExp,_}->
       OldProc=Proc#proc{hist=RestHist,env=OldEnv,exp=OldExp},
       System#sys{msgs = Msgs,procs=[OldProc|RestProcs]};
@@ -159,6 +167,16 @@ eval_proc_opt(RestSystem, CurProc) ->
           {exit,_,_,_}->?RULE_SEQ;
           {error,_,_,_}->?RULE_SEQ;
           {signal,_,_,_,_,_,_}->?RULE_SIGNAL;
+          {signal,From,error,Reason,Time}->
+            case utils:is_signal_msg_top({signal,From,error,Reason,Time},CurProc) of
+              true->?RULE_SIGNAL;
+              _->?NULL_RULE
+            end;
+          {signal,From,true,normal,Time}->
+            case utils:is_signal_msg_top({signal,From,true,normal,Time},CurProc) of
+              true->?RULE_SIGNAL;
+              _->?NULL_RULE
+            end;
           {signal,_,_,_,_}->?RULE_SIGNAL;
           {propag,_,_,_,_,HistSig}->
             Acc={Signals,CurProc#proc.pid,true},
@@ -207,22 +225,25 @@ eval_proc_opt(RestSystem, CurProc) ->
 
 eval_sched_opt(Proc) ->
   #proc{hist = Hist, mail = Mail} = Proc,
-  NewMail=[M||M<-Mail,utils:is_not_a_signal_message(M,Hist,true)],
-  %NewMail=Mail,
+  %NewMail=[M||M<-Mail,utils:is_not_a_signal_message(M,Hist,true)],
   Rule =
-    case NewMail of
+    case Mail of
       [] -> ?NULL_RULE;
       _ ->
-        {LastMsg,_} = utils:last_msg_rest(NewMail),
-        {_,Time} = LastMsg,
-        TopRec = utils:topmost_rec(Hist),
-        case TopRec of
-          no_rec -> {?RULE_SCHED, Time};
-          {rec,_,_,OldMsg,OldMail} ->
-            case utils:is_queue_minus_msg(OldMail, OldMsg, NewMail) of
-              false -> {?RULE_SCHED, Time};
-              true -> ?NULL_RULE
-            end
+        {LastMsg,_} = utils:last_msg_rest(Mail),
+        case utils:is_not_a_signal_message(LastMsg,Hist,true) of
+            true->
+              {_,Time} = LastMsg,
+              TopRec = utils:topmost_rec(Hist),
+              case TopRec of
+              no_rec -> {?RULE_SCHED, Time};
+                {rec,_,_,OldMsg,OldMail} ->
+                case utils:is_queue_minus_msg(OldMail, OldMsg,Mail) of
+                  false -> {?RULE_SCHED, Time};
+                  true -> ?NULL_RULE
+                end
+              end;
+            _->?NULL_RULE
         end
     end,
   case Rule of

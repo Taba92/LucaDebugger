@@ -167,12 +167,12 @@ eval_proc_opt(RestSystem, CurProc) ->
           {exit,_,_,_}->?RULE_SEQ;
           {error,_,_,_}->?RULE_SEQ;
           {signal,_,_,_,_,_,_}->?RULE_SIGNAL;
-          {signal,From,error,Reason,Time}->
+          {signal,From,error,Reason,Time}->%%nel caso di errore e flag=true
             case utils:is_signal_msg_top({signal,From,error,Reason,Time},CurProc) of
               true->?RULE_SIGNAL;
               _->?NULL_RULE
             end;
-          {signal,From,true,normal,Time}->
+          {signal,From,true,normal,Time}->%nel caso di uscita normale e flag=true
             case utils:is_signal_msg_top({signal,From,true,normal,Time},CurProc) of
               true->?RULE_SIGNAL;
               _->?NULL_RULE
@@ -225,7 +225,6 @@ eval_proc_opt(RestSystem, CurProc) ->
 
 eval_sched_opt(Proc) ->
   #proc{hist = Hist, mail = Mail} = Proc,
-  %NewMail=[M||M<-Mail,utils:is_not_a_signal_message(M,Hist,true)],
   Rule =
     case Mail of
       [] -> ?NULL_RULE;

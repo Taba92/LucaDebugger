@@ -521,9 +521,9 @@ pp_hist_2({propag,_,_,_,_,HistVal}) ->
       "propag_error{"++atom_to_list(Reason)++"(" ++ [{?CAUDER_GREEN, LinksString}] ++ ")}"
     end;
 pp_hist_2({signal,FromPid,_,_,Time}) ->
-  "got_signal(" ++ [{?CAUDER_GREEN, pp(FromPid)}] ++","++integer_to_list(Time)++")";
+  "got_signal(" ++ [{?CAUDER_GREEN, pp(FromPid)}] ++","++[{?wxRED, integer_to_list(Time)}]++")";
 pp_hist_2({signal,FromPid,_,_,_,_,Time}) ->
-  "got_signal(" ++ [{?CAUDER_GREEN, pp(FromPid)}] ++","++integer_to_list(Time)++ ")".
+  "got_signal(" ++ [{?CAUDER_GREEN, pp(FromPid)}] ++","++[{?wxRED, integer_to_list(Time)}]++ ")".
 
 stringify(HistLink,Acc)->
   PidString=pp(element(1,HistLink)),

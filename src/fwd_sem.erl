@@ -465,7 +465,7 @@ eval_signal(System,Id)->
   #signal{dest=LinkPid,from=From,type=Type,reason=Reason,time=Time}=Signal,
   {Proc,RestProcs}=utils:select_proc(Procs,LinkPid),
   NewProc=utils:deliver_signal(Proc,Signal),
-  TraceItem = #trace{type = ?RULE_SIGNAL, from = From, val = {Type,Reason},to=LinkPid, time = Time},
+  TraceItem = #trace{type = ?RULE_SIGNAL, from = LinkPid, val = {Type,Reason},to=From, time = Time},
   NewTrace = [TraceItem|Trace],
   System#sys{signals=RestSignals,procs=[NewProc|RestProcs],trace=NewTrace}.
 

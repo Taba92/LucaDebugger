@@ -199,9 +199,9 @@ parse_opt([], S, CollectorOpt) ->
 parse_opt([H | T], S, CollectorOpt) ->
     case H of
         %STORE THE ASYNC PATTERNS SELECTED FROM THE USER WITH ITS HOMOLOGIST LABEL
-        {async_patterns,{Spawn,SpawnLink,ProcessFlag,PropagNormal,PropagError,Send,Receive,Exit}} ->
-            Patterns=#{Spawn=>spawn,SpawnLink=>spawn_link,ProcessFlag=>p_flag,Send=>send,
-                PropagNormal=>propag_normal,PropagError=>propag_error,Receive=>'receive',Exit=>exit},
+        {async_patterns,{Spawn,SpawnLink,ProcessFlag,Propag,Signal,Send,Receive,Exit}} ->
+            Patterns=[{Spawn,spawn},{SpawnLink,spawn_link},{ProcessFlag,p_flag},{Send,send},
+                {Propag,propag},{Signal,signal},{Receive,'receive'},{Exit,exit}],
             parse_opt(T, S#state{async_patterns=Patterns}, CollectorOpt);
         {async_patterns,_Else} ->
             parse_opt(T, S#state{async_patterns=undefined}, CollectorOpt);
@@ -816,7 +816,7 @@ handle_info(#wx{event = #wxScroll{type = scroll_changed}} = Wx, S) ->
     S2 = scroll_changed(S, Diff),
     case ((S2#state.async) and (Diff /=0)) of%% if i did not moved the scroll bar
         true->
-            Spawn=element(1,getAsyncPatternsKeys(S2#state.async_patterns)),%%obtain key of spawn async pattern
+            {Spawn,spawn}=lists:keyfind(spawn,2,S2#state.async_patterns),%%obtain key of spawn async pattern
             case Diff > 0 of
                 true->%in case of scroll down
                     put(up,get(up)+Diff),%i must be synchronized with depth (Diff) of scrolling
@@ -870,7 +870,7 @@ handle_info(#wx{event = #wxMouse{type = mousewheel, wheelRotation = Rot}}, S) wh
     end,
     case ((S2#state.async) and (get(up) > 0)) of
         true->%if true,i have to keep alive process already alive,after scrolling
-            Spawn=element(1,getAsyncPatternsKeys(S2#state.async_patterns)),%%obtain key of spawn async pattern
+            {Spawn,spawn}=lists:keyfind(spawn,2,S2#state.async_patterns),%%obtain key of spawn async pattern
             DC = wxClientDC:new(S2#state.canvas),
             PrecEvents=get(precEventsBar)--queue_to_list(S2#state.events),%delete events that won't be shown after scrolling
             put(precEventsBar,PrecEvents),%%store new prec events
@@ -890,7 +890,7 @@ handle_info(#wx{event = #wxMouse{type = mousewheel, wheelRotation = Rot}}, S) wh
     end,
     case S2#state.async of
         true->%if true,i have to keep alive process already alive,after scrolling
-            Spawn=element(1,getAsyncPatternsKeys(S2#state.async_patterns)),%%obtain key of spawn async pattern
+            {Spawn,spawn}=lists:keyfind(spawn,2,S2#state.async_patterns),%%obtain key of spawn async pattern
             DC = wxClientDC:new(S2#state.canvas),
             PrecEvents=queue_to_list(S#state.events)--queue_to_list(S2#state.events),%obtain events that won't be shown after scrolling
             put(precEventsBar,get(precEventsBar)++PrecEvents),%%store new prec events
@@ -904,7 +904,7 @@ handle_info(#wx{event = #wxSize{size = {OldW, OldH}}} = Wx, S) ->
         0->ok;%if i am in the first window, i don't redraw spawns
         _->%else,i will redrawn oldest spawn not showed
             DC = wxClientDC:new(S#state.canvas),
-            Spawn=element(1,getAsyncPatternsKeys(S#state.async_patterns)),%%obtain key of spawn async pattern
+            {Spawn,spawn}=lists:keyfind(spawn,2,S#state.async_patterns),%%obtain key of spawn async pattern
             [keepAlive(S,EventSpawn,DC)||EventSpawn<-get(precEventsBar),EventSpawn#e.event#event.label==Spawn],
             wxClientDC:destroy(DC)
     end,
@@ -1224,7 +1224,7 @@ open_viewer(Scale, FilterName, Actors, S) ->
 	 {hide_actions,  S#state.hide_actions},
 	 {hide_actors,   S#state.hide_actors},
      {async,         S#state.async},
-     {async_patterns, getAsyncPatternsKeys(S#state.async_patterns)},
+     {async_patterns, S#state.async_patterns},
 	 {actors,        Actors},
 	 {scale,         Scale},
 	 {width,         S#state.width},
@@ -1660,34 +1660,44 @@ draw_named_arrow(Label, FromName, ToName, FromPos, ToPos, E, S, DC) ->
         case S2#state.async of
             true->
                 draw_lifeline(S2,?initial_y*S2#state.scale,getFirstActorPos(S2),DC),%totally mark the "root" process
-                case maps:get(E#e.event#event.label,S2#state.async_patterns) of%based on asynchronous patterns and type of event, I get his "counterpart"
-                    spawn ->
+                case lists:keyfind(E#e.event#event.label,1,S2#state.async_patterns) of%based on asynchronous patterns and type of event, I get his "counterpart"
+                    {_,spawn} ->
                         S3 = draw_arrow(FromPos, ToPos, S2, DC),
                         Pos=getActorToPos(S3#state.actors,E,0),
                         draw_lifeline(S3,S3#state.y_pos,Pos,DC),
                         drawStartPoint(S3,DC,FromPos,S3#state.y_pos),
                         draw_label(Label, FromName, ToName, FromPos, ToPos, S3, DC);
-                    spawn_link->
+                    {_,spawn_link}->
                         S3 = draw_arrow(FromPos, ToPos, S2, DC),
                         Pos=getActorToPos(S3#state.actors,E,0),
                         draw_lifeline(S3,S3#state.y_pos,Pos,DC),
                         drawStartPoint(S3,DC,FromPos,S3#state.y_pos),
                         draw_label(Label, FromName, ToName, FromPos, ToPos, S3, DC);
-                    propag_normal->
-                        S3 = draw_arrow(FromPos, ToPos, S2, DC),
+                    {_,propag}->
+                        io:fwrite("PROPAG: ~p~n",[E]),
+                        S3= draw_arrow(FromPos, FromPos, S2, DC),
                         drawStartPoint(S3,DC,FromPos,S3#state.y_pos),
-                        draw_label(Label, FromName, ToName, FromPos, ToPos, S3, DC);
-                    propag_error->
-                        S3 = draw_arrow(FromPos, ToPos, S2, DC),
-                        drawStartPoint(S3,DC,FromPos,S3#state.y_pos),
-                        draw_label(Label, FromName, ToName, FromPos, ToPos, S3, DC);
-                    p_flag->
-                        S3 = draw_arrow(FromPos, ToPos, S2, DC),
-                        drawStartPoint(S3,DC,FromPos,S3#state.y_pos),
-                        draw_label(Label, FromName, ToName, FromPos, ToPos, S3, DC);
-                    'receive'->
+                        draw_label(Label, FromName, ToName, FromPos, FromPos, S3, DC);
+                    {_,signal}->
                         S3=draw_arrow(FromPos,FromPos,S2,DC),
-                        MirrorSendPos=cercaSpec(E#e.event,queue_to_list(S3#state.events),S3),
+                        MirrorSendPos=cercaSpec({propag,signal},E#e.event,queue_to_list(S3#state.events),S3),
+                        case MirrorSendPos==null of
+                            false->
+                                Cont=lists:flatten(io_lib:format("~p", [E#e.event#event.contents])),
+                                FromPosY=Y-((E#e.pos-MirrorSendPos)*?incr_y*S3#state.scale),
+                                drawTest(Cont,FromPos,ToPos,FromPosY,S3,DC),
+                                S4=draw_arrow_async(FromPos,FromPosY,ToPos, S3, DC),
+                                delete_label("propag",ToPos,ToPos,FromPosY, S4, DC);
+                            true->%handles the case in which there is a receive before a send !! (it should never occur)
+                                draw_label(Label, FromName, ToName, FromPos, FromPos, S3, DC)
+                        end;
+                    {_,p_flag}->
+                        S3 = draw_arrow(FromPos, ToPos, S2, DC),
+                        drawStartPoint(S3,DC,FromPos,S3#state.y_pos),
+                        draw_label(Label, FromName, ToName, FromPos, ToPos, S3, DC);
+                    {_,'receive'}->
+                        S3=draw_arrow(FromPos,FromPos,S2,DC),
+                        MirrorSendPos=cercaSpec({send,'receive'},E#e.event,queue_to_list(S3#state.events),S3),
                         case MirrorSendPos==null of
                             false->
                                 FromPosY=Y-((E#e.pos-MirrorSendPos)*?incr_y*S3#state.scale),
@@ -1697,11 +1707,11 @@ draw_named_arrow(Label, FromName, ToName, FromPos, ToPos, E, S, DC) ->
                             true->%handles the case in which there is a receive before a send !! (it should never occur)
                                 draw_label(Label, FromName, ToName, FromPos, FromPos, S3, DC)
                         end;
-                    send->
+                    {_,send}->
                         S3=draw_arrow(FromPos,FromPos,S2,DC),
                         drawStartPoint(S3,DC,FromPos,S3#state.y_pos),
                         draw_label(Label, FromName, ToName, FromPos, FromPos, S3, DC);
-                    exit->
+                    {_,exit}->
                         Pos=getActorToPos(S2#state.actors,E,0),
                         draw_deadline(S2,S2#state.y_pos,Pos,DC),
                         drawStartPoint(S2,DC,FromPos,S2#state.y_pos),
@@ -1746,7 +1756,6 @@ calcTextPoints(Text,Len,MedPoint,InfPoint,SupPoint,CharWidth)->
     end.
    
 drawTest(Text,FromPos,ToPos,FromPosY,S,DC)->
-    io:fwrite("FOREGROUND COLOR: ~p~n",[wxDC:getTextForeground(DC)]),
     Const=6*S#state.scale,
     CharWidth=wxDC:getCharWidth(DC),
     TextLen=length(Text)*CharWidth,
@@ -1784,23 +1793,6 @@ delete_label(Label,FromPos, ToPos,PosY, S, DC) ->
     write_text(Label, X, Y, Color, S#state.normal_font, S, DC),%%
     write_text(Label, X, Y, Color, S#state.normal_font, S, DC),%%
     S.
-
-getAsyncPatternsKeys(AsyncPattern)->
-    case AsyncPattern of
-        undefined->
-            undefined;
-        Map->
-            L=maps:to_list(AsyncPattern),
-            {Spawn,spawn}=lists:keyfind(spawn,2,L),
-            {SpawnLink,spawn_link}=lists:keyfind(spawn_link,2,L),
-            {ProcessFlag,p_flag}=lists:keyfind(p_flag,2,L),
-            {PropagNormal,propag_normal}=lists:keyfind(propag_normal,2,L),
-            {PropagError,propag_error}=lists:keyfind(propag_error,2,L),
-            {Send,send}=lists:keyfind(send,2,L),
-            {Receive,'receive'}=lists:keyfind('receive',2,L),
-            {Exit,exit}=lists:keyfind(exit,2,L),
-            {Spawn,SpawnLink,ProcessFlag,PropagNormal,PropagError,Send,Receive,Exit}
-    end.
 
  keepAlive(S,EventSpawn,DC)->%used when scrolling,to keep alive already alive actors
     {FromPos,ToPos}={getActorFromPos(S#state.actors,EventSpawn,0),getActorToPos(S#state.actors,EventSpawn,0)},
@@ -1860,10 +1852,10 @@ draw_lifeline(S,LineTopY,NumActor,DC)->%draws the big green line of life of an a
     wxPen:setWidth(S#state.pen,1).
 
  %%Algorithm looks for mirror events
-cercaSpec(Event,Events,S)->%Taken as input the receive event and the queue of all events, look for the mirror send!
+cercaSpec({send,'receive'},Event,Events,S)->%Taken as input the receive event and the queue of all events, look for the mirror send!
     %% ATTENTION, I CAN HAVE MORE EQUAL SENDS
     %Creates the list of event (s) mirroring to the receive in question
-    Send=maps:get(send,S#state.async_patterns),%the send label according to the asynchronous communication pattern
+    {Send,send}=lists:keyfind(send,2,S#state.async_patterns),%the send label according to the asynchronous communication pattern
     Receive=Event#event.label,
     %% Create the mirror sends list
     EventsSpec=[{Pos,Key,Spec}||{e,Pos,Key,Spec}<-Events,Spec#event.label==Send,Event#event.from==Spec#event.to,
@@ -1877,9 +1869,34 @@ cercaSpec(Event,Events,S)->%Taken as input the receive event and the queue of al
     case Pos=<length(EventsSpec) of
         true->element(1,lists:nth(Pos,EventsSpec));%I'm going to take the Pos-th element of the specular send and return the position!
         false->null
+    end;
+cercaSpec({propag,signal},Event,Events,S)->%Taken as input the receive event and the queue of all events, look for the mirror send!
+    %% ATTENTION, I CAN HAVE MORE EQUAL SENDS
+    %Creates the list of event (s) mirroring to the receive in question
+    {Propag,propag}=lists:keyfind(propag,2,S#state.async_patterns),%the send label according to the asynchronous communication pattern
+    Signal=Event#event.label,
+    SignalVal=case Event#event.contents of
+                {normal,_,Time}->{list_to_integer(Event#event.from),normal,Time};
+                {error,Reason,Time}->{list_to_integer(Event#event.from),error,Reason,Time}
+            end,
+    %% Create the mirror sends list
+    io:fwrite("SIGNAL VAL: ~p~n",[SignalVal]),
+    EventsSpec=[{Pos,Key,Spec}||{e,Pos,Key,Spec}<-Events,Spec#event.label==Propag,Event#event.to==Spec#event.from,
+                lists:member(SignalVal,Spec#event.contents)],
+    %% Create the mirror receives list
+    io:fwrite("SPEC Event: ~p~n",[EventsSpec]),
+    SameEvents=[{Pos,Key,Same}||{e,Pos,Key,Same}<-Events,Same#event.label==Signal,Event#event.from==Same#event.from,
+                Event#event.to==Same#event.to,Event#event.contents==Same#event.contents],
+    io:fwrite("SAME Event: ~p~n",[SameEvents]),
+    %I get what number of receive is based on the time id of the event (trace_ts)
+    Pos=getReceivePos(SameEvents,Event,1),%%lists start at index 1 not 0!
+    %I'm going to get the mirror to the receive one !!
+    case Pos=<length(EventsSpec) of
+        true->element(1,lists:nth(Pos,EventsSpec));%I'm going to take the Pos-th element of the specular send and return the position!
+        false->null
     end.
 
-getReceivePos([],_,Acc)->Acc;%similar to getActorPos
+getReceivePos([],_,Acc)->Acc;
 getReceivePos([H|T],E,Acc)->
     case E#event.trace_ts==(element(3,H))#event.trace_ts of
         true->

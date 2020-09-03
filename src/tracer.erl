@@ -43,7 +43,7 @@ parseTrace(ListTrace,#trace{type=Type,from=From,to=To,val=Val,time=Time})->
 		?RULE_PROPAG->
 			#trace{type=Type,from=pp(From),to=pp(From),val=pp_signal(Val)};
 		?RULE_SIGNAL->
-			#trace{type=Type,from=pp(From),to=pp(To),val=Val,time=Time}
+			#trace{type=Type,from=pp(To),to=pp(From),val=Val,time=Time}
 	end.
 
 pp_signal([])->[];

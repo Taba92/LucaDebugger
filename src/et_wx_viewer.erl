@@ -1674,10 +1674,11 @@ draw_named_arrow(Label, FromName, ToName, FromPos, ToPos, E, S, DC) ->
                         drawStartPoint(S3,DC,FromPos,S3#state.y_pos),
                         draw_label(Label, FromName, ToName, FromPos, ToPos, S3, DC);
                     {_,propag}->
-                        io:fwrite("PROPAG: ~p~n",[E]),
+                        Mess=getPropagMess(hd(E#e.event#event.contents)),
+                        NewLabel=Label++"\n"++Mess,
                         S3= draw_arrow(FromPos, FromPos, S2, DC),
                         drawStartPoint(S3,DC,FromPos,S3#state.y_pos),
-                        draw_label(Label, FromName, ToName, FromPos, FromPos, S3, DC);
+                        draw_label(NewLabel, FromName, ToName, FromPos, FromPos, S3, DC);
                     {_,signal}->
                         S3=draw_arrow(FromPos,FromPos,S2,DC),
                         MirrorSendPos=cercaSpec({propag,signal},E#e.event,queue_to_list(S3#state.events),S3),
@@ -1687,14 +1688,20 @@ draw_named_arrow(Label, FromName, ToName, FromPos, ToPos, E, S, DC) ->
                                 FromPosY=Y-((E#e.pos-MirrorSendPos)*?incr_y*S3#state.scale),
                                 drawTest(Cont,FromPos,ToPos,FromPosY,S3,DC),
                                 S4=draw_arrow_async(FromPos,FromPosY,ToPos, S3, DC),
-                                delete_label("propag",ToPos,ToPos,FromPosY, S4, DC);
+                                Mess=getPropagMess(E#e.event#event.contents),
+                                NewLabel="propag\n"++Mess,
+                                delete_label(NewLabel,ToPos,ToPos,FromPosY, S4, DC);
                             true->%handles the case in which there is a receive before a send !! (it should never occur)
                                 draw_label(Label, FromName, ToName, FromPos, FromPos, S3, DC)
                         end;
                     {_,p_flag}->
+                        Flag=case E#e.event#event.contents of
+                            "'true'"->"T";
+                            _->"F" end,
+                        NewLabel="p_flag="++Flag,
                         S3 = draw_arrow(FromPos, ToPos, S2, DC),
                         drawStartPoint(S3,DC,FromPos,S3#state.y_pos),
-                        draw_label(Label, FromName, ToName, FromPos, ToPos, S3, DC);
+                        draw_label(NewLabel, FromName, ToName, FromPos, ToPos, S3, DC);
                     {_,'receive'}->
                         S3=draw_arrow(FromPos,FromPos,S2,DC),
                         MirrorSendPos=cercaSpec({send,'receive'},E#e.event,queue_to_list(S3#state.events),S3),
@@ -1703,14 +1710,16 @@ draw_named_arrow(Label, FromName, ToName, FromPos, ToPos, E, S, DC) ->
                                 FromPosY=Y-((E#e.pos-MirrorSendPos)*?incr_y*S3#state.scale),
                                 drawTest(E#e.event#event.contents,FromPos,ToPos,FromPosY,S3,DC),
                                 S4=draw_arrow_async(FromPos,FromPosY,ToPos, S3, DC),
-                                delete_label("send",ToPos,ToPos,FromPosY, S4, DC);
+                                NewLabel="send\n"++E#e.event#event.contents,
+                                delete_label(NewLabel,ToPos,ToPos,FromPosY, S4, DC);
                             true->%handles the case in which there is a receive before a send !! (it should never occur)
                                 draw_label(Label, FromName, ToName, FromPos, FromPos, S3, DC)
                         end;
                     {_,send}->
+                        NewLabel="send\n"++E#e.event#event.contents,
                         S3=draw_arrow(FromPos,FromPos,S2,DC),
                         drawStartPoint(S3,DC,FromPos,S3#state.y_pos),
-                        draw_label(Label, FromName, ToName, FromPos, FromPos, S3, DC);
+                        draw_label(NewLabel, FromName, ToName, FromPos, FromPos, S3, DC);
                     {_,exit}->
                         Pos=getActorToPos(S2#state.actors,E,0),
                         draw_deadline(S2,S2#state.y_pos,Pos,DC),
@@ -1724,6 +1733,15 @@ draw_named_arrow(Label, FromName, ToName, FromPos, ToPos, E, S, DC) ->
         end
     end.
 %%FUNCTIONS OF ASYNC BEHAVIOUR OF GRAPHIC CHART%%%%%%%%
+
+getPropagMess({_,error,Reason,_})->
+    "{"++"error,\n"++atom_to_list(Reason)++"}";
+getPropagMess({_,normal,_})->
+    "{normal}";
+getPropagMess({error,Reason,_})->
+    "{"++"error,\n"++atom_to_list(Reason)++"}";
+getPropagMess({normal,_})->
+     "{normal}".
 
 getMediumPoint({Xa,Ya},{Xb,Yb})->
     Xm=round((Xa+Xb)/2),
@@ -1880,14 +1898,11 @@ cercaSpec({propag,signal},Event,Events,S)->%Taken as input the receive event and
                 {error,Reason,Time}->{list_to_integer(Event#event.from),error,Reason,Time}
             end,
     %% Create the mirror sends list
-    io:fwrite("SIGNAL VAL: ~p~n",[SignalVal]),
     EventsSpec=[{Pos,Key,Spec}||{e,Pos,Key,Spec}<-Events,Spec#event.label==Propag,Event#event.to==Spec#event.from,
                 lists:member(SignalVal,Spec#event.contents)],
     %% Create the mirror receives list
-    io:fwrite("SPEC Event: ~p~n",[EventsSpec]),
     SameEvents=[{Pos,Key,Same}||{e,Pos,Key,Same}<-Events,Same#event.label==Signal,Event#event.from==Same#event.from,
                 Event#event.to==Same#event.to,Event#event.contents==Same#event.contents],
-    io:fwrite("SAME Event: ~p~n",[SameEvents]),
     %I get what number of receive is based on the time id of the event (trace_ts)
     Pos=getReceivePos(SameEvents,Event,1),%%lists start at index 1 not 0!
     %I'm going to get the mirror to the receive one !!

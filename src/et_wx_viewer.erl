@@ -1704,10 +1704,14 @@ draw_named_arrow(Label, FromName, ToName, FromPos, ToPos, E, S, DC) ->
                         draw_label(NewLabel, FromName, ToName, FromPos, ToPos, S3, DC);
                     {_,'receive'}->
                         S3=draw_arrow(FromPos,FromPos,S2,DC),
-                        MirrorSendPos=cercaSpec({send,'receive'},E#e.event,queue_to_list(S3#state.events),S3),
-                        case MirrorSendPos==null of
+                        MirrorPos=case isSignalReceive(E#e.event,queue_to_list(S3#state.events),S3) of
+                                true->cercaSpec({signal,'receive'},E#e.event,queue_to_list(S3#state.events),S3);
+                                _->cercaSpec({send,'receive'},E#e.event,queue_to_list(S3#state.events),S3)
+                            end,
+                        %MirrorSendPos=cercaSpec({send,'receive'},E#e.event,queue_to_list(S3#state.events),S3),
+                        case MirrorPos==null of
                             false->
-                                FromPosY=Y-((E#e.pos-MirrorSendPos)*?incr_y*S3#state.scale),
+                                FromPosY=Y-((E#e.pos-MirrorPos)*?incr_y*S3#state.scale),
                                 drawTest(E#e.event#event.contents,FromPos,ToPos,FromPosY,S3,DC),
                                 S4=draw_arrow_async(FromPos,FromPosY,ToPos, S3, DC),
                                 NewLabel="send\n"++E#e.event#event.contents,
@@ -1734,13 +1738,23 @@ draw_named_arrow(Label, FromName, ToName, FromPos, ToPos, E, S, DC) ->
     end.
 %%FUNCTIONS OF ASYNC BEHAVIOUR OF GRAPHIC CHART%%%%%%%%
 
+isSignalReceive(Event,Events,S)->
+    {Signal,signal}=lists:keyfind(signal,2,S#state.async_patterns),
+    Cont=Event#event.contents,
+    Time=list_to_integer(string:slice(Cont,length(Cont)-2,1)),%%in the receive,contents is a string and time is between parenthesis at the end!
+    Signals=[E||{e,Pos,Key,E}<-Events,E#event.label==Signal,element(3,E#event.contents)==Time],
+    case Signals of
+        []->false;
+        _->true
+    end.
+
 getPropagMess({_,error,Reason,_})->
     "{"++"error,\n"++atom_to_list(Reason)++"}";
 getPropagMess({_,normal,_})->
     "{normal}";
 getPropagMess({error,Reason,_})->
     "{"++"error,\n"++atom_to_list(Reason)++"}";
-getPropagMess({normal,_})->
+getPropagMess({normal,_,_})->
      "{normal}".
 
 getMediumPoint({Xa,Ya},{Xb,Yb})->
@@ -1777,22 +1791,27 @@ drawTest(Text,FromPos,ToPos,FromPosY,S,DC)->
     Const=6*S#state.scale,
     CharWidth=wxDC:getCharWidth(DC),
     TextLen=length(Text)*CharWidth,
-    case FromPos<ToPos of%check if the send is more right than receive
-        true->
+    if
+        FromPos<ToPos ->%check if the send is more right than receive
         %This piece of code,obtain the two point of the parallel rect to the async arrow(to stay a little bit up from the arrow!!!)
         %and calculate IT medium point
             ParallelSendPoint={ToPos-Const,FromPosY-Const},
             ParallelReceivePoint={FromPos-Const,S#state.y_pos-Const},
             MedStart=getMediumPoint(ParallelReceivePoint,ParallelSendPoint),
             {NewText,{TextX,TextY}}=calcTextPoints(Text,TextLen,MedStart,ParallelReceivePoint,ParallelSendPoint,CharWidth),
-        %
             Radians = calc_angle({FromPos, FromPosY}, {ToPos,S#state.y_pos});%Point A=Send Point B=Receive
-        false->
+        FromPos>ToPos->
             ParallelSendPoint={ToPos+Const,FromPosY-Const},
             ParallelReceivePoint={FromPos+Const,S#state.y_pos-Const},
             MedStart=getMediumPoint(ParallelReceivePoint,ParallelSendPoint),
             {NewText,{TextX,TextY}}=calcTextPoints(Text,TextLen,MedStart,ParallelSendPoint,ParallelReceivePoint,CharWidth),
-            Radians=calc_angle({ToPos,S#state.y_pos},{FromPos, FromPosY})%Point A=Receive Point B=Send
+            Radians=calc_angle({ToPos,S#state.y_pos},{FromPos, FromPosY});%Point A=Receive Point B=Send
+        FromPos==ToPos->
+            {Xbar,Ybar}=computeBaricenter(FromPos,S#state.y_pos,ToPos,FromPosY),
+            ParallelSendPoint={Xbar,FromPosY-Const},
+            ParallelReceivePoint={Xbar,S#state.y_pos+Const},
+            {NewText,{TextX,TextY}}=calcTextPoints(Text,TextLen,{Xbar,Ybar},ParallelSendPoint,ParallelReceivePoint,CharWidth),
+            Radians=calc_angle({ToPos,S#state.y_pos},{FromPos, FromPosY})
     end,
     Angle=Radians*180/3.14,%obtain value angle in degree
     wxDC:setFont(DC,S#state.normal_font),
@@ -1870,6 +1889,22 @@ draw_lifeline(S,LineTopY,NumActor,DC)->%draws the big green line of life of an a
     wxPen:setWidth(S#state.pen,1).
 
  %%Algorithm looks for mirror events
+cercaSpec({signal,'receive'},Event,Events,S)->%Taken as input the receive event and the queue of all events, look for the mirror send!
+    {Signal,signal}=lists:keyfind(signal,2,S#state.async_patterns),%the send label according to the asynchronous communication pattern
+    Receive=Event#event.label,
+    Cont=Event#event.contents,
+    Time=list_to_integer(string:slice(Cont,length(Cont)-2,1)),%%in the receive,contents is a string and time is between parenthesis at the end!
+    EventsSpec=[{Pos,Key,E}||{e,Pos,Key,E}<-Events,E#event.label==Signal,element(3,E#event.contents)==Time],
+    %% Create the mirror receives list
+    SameEvents=[{Pos,Key,Same}||{e,Pos,Key,Same}<-Events,Same#event.label==Receive,Event#event.from==Same#event.from,
+                Event#event.to==Same#event.to,Event#event.contents==Same#event.contents],
+    %I get what number of receive is based on the time id of the event (trace_ts)
+    Pos=getReceivePos(SameEvents,Event,1),%%lists start at index 1 not 0!
+    %I'm going to get the mirror to the receive one !!
+    case Pos=<length(EventsSpec) of
+        true->element(1,lists:nth(Pos,EventsSpec));%I'm going to take the Pos-th element of the specular send and return the position!
+        false->null
+    end;
 cercaSpec({send,'receive'},Event,Events,S)->%Taken as input the receive event and the queue of all events, look for the mirror send!
     %% ATTENTION, I CAN HAVE MORE EQUAL SENDS
     %Creates the list of event (s) mirroring to the receive in question

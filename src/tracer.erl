@@ -30,8 +30,12 @@ showEvent(CollectorPid,ListTrace)->
 parseTrace(ListTrace,#trace{type=Type,from=From,to=To,val=Val,time=Time})->
 	case Type of
 		?RULE_RECEIVE->
-			[ReceiveTo]=[Send#trace.from||Send<-ListTrace,Send#trace.type==?RULE_SEND,Send#trace.val==Val,Send#trace.time==Time],
-			#trace{type=Type,from=pp(From),to=pp(ReceiveTo),val=pp(Val),time=Time};
+			Senders=[Send#trace.from||Send<-ListTrace,Send#trace.type==?RULE_SEND,Send#trace.val==Val,Send#trace.time==Time],
+			case Senders of
+				[]->#trace{type=Type,from=pp(From),to=pp(From),val=pp(Val),time=Time};
+				[ReceiveTo]->
+					#trace{type=Type,from=pp(From),to=pp(ReceiveTo),val=pp(Val),time=Time}
+			end;
 		?RULE_SEND->
 			#trace{type=Type,from=pp(From),to=pp(To),val=pp(Val),time=Time};
 		?RULE_SPAWN->

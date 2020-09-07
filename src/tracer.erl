@@ -54,10 +54,6 @@ pp_signal([])->[];
 pp_signal([{Link,error,Reason,Time}|T])->[{cerl:concrete(Link),error,Reason,Time}|pp_signal(T)];
 pp_signal([{Link,normal,Time}|T])->[{cerl:concrete(Link),normal,Time}|pp_signal(T)].
 
-pp_links([])->[];
-pp_links([H|T])->
-	[cerl:concrete(H)]++pp_links(T).
-
 init()->%%initialize the tracer
 	{ok,CollectorPid}=et_collector:start_link([]),
 	Patterns={?RULE_SPAWN,?RULE_SPAWN_LINK,?RULE_PROCESS_FLAG,?RULE_PROPAG,?RULE_SIGNAL,?RULE_SEND,?RULE_RECEIVE,exit},

@@ -1742,7 +1742,7 @@ isSignalReceive(Event,Events,S)->
     {Signal,signal}=lists:keyfind(signal,2,S#state.async_patterns),
     Cont=Event#event.contents,
     Time=list_to_integer(string:slice(Cont,length(Cont)-2,1)),%%in the receive,contents is a string and time is between parenthesis at the end!
-    Signals=[E||{e,Pos,Key,E}<-Events,E#event.label==Signal,element(3,E#event.contents)==Time],
+    Signals=[E||{e,_,_,E}<-Events,E#event.label==Signal,element(3,E#event.contents)==Time],
     case Signals of
         []->false;
         _->true

@@ -1,0 +1,28 @@
+\documentclass[a4paper,12pt]{article}
+
+\begin{document}
+Questo è un esempio di comunicazione client-server,//
+in cui \textit{N client fanno richieste ad 1 server,che per ogni richiesta spawna 1 worker}.\\
+Nel caso un worker fallisse la gestione della richiesta,il server stesso risponderà con un errore al client.\\
+I cerchi neri sono processi con flag=true,mentre quelli bianchi con flag=false:
+
+\setlength{\unitlength}{1cm}
+\begin{picture}(8,8)(0,0)
+\put(0,7){\vector(1,0){1}}
+\put(1,7){= RICHIESTA}
+\put(0,6){\line(1,0){1}}
+\put(1,6){= SPAWN WORKER}
+\put(7,7){\oval(2,1)}
+\put(8,7){= WORKER}
+\put(1,5){\circle{1}}
+\put(1,4){.....}
+\put(1,3){\circle{1}}
+\put(1.5,5){\vector(2,-1){2}}
+\put(1.5,3){\vector(2,1){2}}
+\put(3.7,4){\circle*{1}}
+\put(4,4){\line(2,1){2}}
+\put(4,4){\line(2,-1){2}}
+\put(7,5){\oval(2,1)}
+\put(7,3){\oval(2,1)}
+\end{picture}
+\end{document}

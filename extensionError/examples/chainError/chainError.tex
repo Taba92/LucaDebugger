@@ -1,0 +1,19 @@
+\documentclass[a4paper,12pt]{article}
+
+\begin{document}
+Questo esempio crea una lista di processi,in cui uno dei processi,a partire dal secondo in poi,
+\textit{va in condizione di errore/uscita anomala dal codice di esecuzione}.
+I cerchi neri sono processi con flag=true,mentre quelli bianchi con flag=false:
+
+\setlength{\unitlength}{1cm}
+\begin{picture}(6,2)(0,0)
+\put(1,1){\circle*{1}} 
+\put(1,1){\line(1,0){1.5}} 
+\put(3,1){\circle{1}}
+\put(3.5,1){\line(1,0){1}}  
+\put(4.5,0.75){.........}
+\put(5.5,1){\line(1,0){1}} 
+\put(7,1){\circle{1}}
+
+\end{picture}
+\end{document}

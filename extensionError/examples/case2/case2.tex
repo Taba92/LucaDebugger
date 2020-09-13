@@ -1,0 +1,20 @@
+\documentclass[a4paper,12pt]{article}
+
+\begin{document}
+Questo esempio crea una lista di processi,in cui:\\
+Il primo,il secondo,e il terzo processo \textit{terminano in modo anomalo};\\
+Il quarto processo \textit{termina in modo normale};
+I cerchi neri sono processi con flag=true,mentre quelli bianchi con flag=false:
+
+\setlength{\unitlength}{1cm}
+\begin{picture}(6,2)(0,0)
+\put(1,1){\circle*{1}} 
+\put(1,1){\line(1,0){1.5}} 
+\put(3,1){\circle{1}}
+\put(3.5,1){\line(1,0){1}}  
+\put(5,1){\circle{1}}
+\put(5.5,1){\line(1,0){1}} 
+\put(6.5,1){\circle*{1}}
+
+\end{picture}
+\end{document}

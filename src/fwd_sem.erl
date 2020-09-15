@@ -358,10 +358,12 @@ eval_step(System, Pid) ->
       false->%%fine codice o uscita anomala,inizio a guardare i link del processo morente
         case cerl:concrete(Exp) of
           {error,Reason,stack}->
-            Acc={Signals,Pid,[],error,Reason},
+            ReasonVal=case Reason of {R,_}->R; _->Reason end,
+            Acc={Signals,Pid,[],error,ReasonVal},
             {NewSignals,_,HistVal,Type,_}=lists:foldl(fun utils:fwd_propag/2,Acc,Links);
           {exit,Reason}when Reason/=normal->
-            Acc={Signals,Pid,[],error,Reason},
+            ReasonVal=case Reason of {R,_}->R; _->Reason end,
+            Acc={Signals,Pid,[],error,ReasonVal},
             {NewSignals,_,HistVal,Type,_}=lists:foldl(fun utils:fwd_propag/2,Acc,Links);
           {exit,normal}->
             Acc={Signals,Pid,[],normal},

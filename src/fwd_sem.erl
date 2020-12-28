@@ -393,13 +393,13 @@ eval_step(System, Pid) ->
           NewHist=[{exit,Env,Exp,Reason}|Hist],
           NewProc=Proc#proc{hist=NewHist,exp=cerl:abstract({exit,Reason})},
           System#sys{msgs = Msgs,signals=Signals,procs=[NewProc|RestProcs]};
-        {exit,DestPid,Reason}->
+        {exit,DestPid,R}->
           Time = ref_lookup(?FRESH_TIME),
           ref_add(?FRESH_TIME, Time + 1),
-          Type=case cerl:concrete(Reason) of
-              normal->normal;
-              kill->killer;
-              _->error
+          {Type,Reason}=case cerl:concrete(R) of
+              normal->{normal,undefined};
+              kill->{killer,R};
+              _->{error,R}
             end,
           NewSignal = #signal{dest = DestPid,from=Pid,type=Type,reason=Reason,time = Time},
           NewSignals = [NewSignal|Signals],

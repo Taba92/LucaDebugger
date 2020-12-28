@@ -7,6 +7,7 @@ main()->
 launcher()->
 	process_flag(trap_exit,true),
 	spawn_link(?MODULE,exiter,[self()]),
+	self(),
 	receive M->io:fwrite("~p~n",[M]) end.
 
 exiter(Pid)->

@@ -506,6 +506,8 @@ pp_hist_2({error,_,_,Reason}) ->
   "error("++atom_to_list(Reason)++")";
 pp_hist_2({exit,_,_,Reason}) ->
   "exit("++atom_to_list(Reason)++")";
+pp_hist_2({exit,_,_,_,_,Reason,Time}) ->
+  "exit(" ++ pp(Reason) ++ "," ++ [{?wxRED, integer_to_list(Time)}] ++ ")";
 pp_hist_2({spawn,_,_,Pid}) ->
   "spawn(" ++ [{?CAUDER_GREEN, pp(Pid)}] ++ ")";
 pp_hist_2({send,_,_,_,{Value,Time}}) ->

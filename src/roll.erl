@@ -78,7 +78,7 @@ roll_signal({LinkPid,normal,Time},{System,Pid})->
       _->NewSystem=eval_step(System,LinkPid),
         roll_signal({LinkPid,normal,Time},{NewSystem,Pid})
   end;
-roll_signal({Type,DestPid,Reason,Time},{System,Pid})->
+roll_signal({Type,DestPid,Reason,Time},{System,Pid})->%for exit/2
    Signal=#signal{dest=DestPid,from=Pid,type=Type,reason=Reason,time=Time},
    case lists:member(Signal,System#sys.signals) of
       true->{System,Pid};

@@ -821,8 +821,8 @@ rel_binds(Env, Exp) ->
 gen_log_send(Pid, OtherPid, MsgValue, Time) ->
 [["Roll send from ",pp_pid(Pid), " of ",pp(MsgValue), " to ",pp_pid(OtherPid), " (",integer_to_list(Time),")"]].
 
-gen_log_exit(Pid,DestPid,Type,Reason,Time)-> 
-  [["Roll exit/2 from ",pp_pid(Pid), " of {",atom_to_list(Type),pp(Reason), "} to ",pp_pid(DestPid), " (",integer_to_list(Time),")"]].
+gen_log_exit(Pid,DestPid,Type,_,Time)-> 
+  [["Roll exit/2 from ",pp_pid(Pid), " of ",atom_to_list(Type), " to ",pp_pid(DestPid), " (",integer_to_list(Time),")"]].
 
 gen_log_spawn(_Pid, OtherPid) ->
   % [["Roll SPAWN of ",pp_pid(OtherPid)," from ",pp_pid(Pid)]].

@@ -5,6 +5,7 @@ main()->
 	process_flag(trap_exit,true),
 	spawn_link(?MODULE,child,[true]),
 	spawn_link(?MODULE,child,[false]),
+	io:fwrite("~p~n",["ciao"]),
 	%spawn_link(?MODULE,child,[false]),
 	%spawn_link(?MODULE,child,[true]),
 	startSupervision().

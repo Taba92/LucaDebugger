@@ -4,7 +4,7 @@
 main()->
 	process_flag(trap_exit,true),
 	spawn_link(?MODULE,spawnNorm,[0]),
-	self().
+	receive Msg->Msg end.
 
 spawnNorm(2)->self(),self(),3/1;
 spawnNorm(N)->

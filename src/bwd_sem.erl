@@ -65,9 +65,20 @@ eval_step(System, Pid) ->
       OldTrace = lists:delete(TraceItem, Trace),
       OldSignal=#signal{dest=Pid,from=From,type=normal,time=Time},
       System#sys{signals=[OldSignal|Signals],procs=[OldProc|RestProcs],trace=OldTrace};
+    {signal,From,killed,OldEnv,OldExp,OldMail,Time}->
+     OldProc=Proc#proc{hist=RestHist,env=OldEnv,exp=OldExp,mail=OldMail},
+      TraceItem = #trace{type = ?RULE_SIGNAL, from = From, val = {killer,kill},to=Pid,time=Time},
+      OldTrace = lists:delete(TraceItem, Trace),
+      OldSignal=#signal{dest=Pid,from=From,type=killer,reason=cerl:abstract(kill),time=Time},
+      System#sys{signals=[OldSignal|Signals],procs=[OldProc|RestProcs],trace=OldTrace};
     {exit,OldEnv,OldExp,_}->
       OldProc=Proc#proc{hist=RestHist,env=OldEnv,exp=OldExp},
       System#sys{msgs = Msgs,procs=[OldProc|RestProcs]};
+    {exit,OldEnv,OldExp,Type,DestPid,Reason,Time}->
+      Signal=#signal{dest = DestPid,from=Pid,type=Type,reason=Reason,time = Time},
+      OldSignals=lists:delete(Signal,Signals),
+      OldProc=Proc#proc{hist=RestHist,env=OldEnv,exp=OldExp},
+      System#sys{msgs = Msgs,signals=OldSignals,procs=[OldProc|RestProcs]};
     {error,OldEnv,OldExp,_}->
       OldProc=Proc#proc{hist=RestHist,env=OldEnv,exp=OldExp},
       System#sys{msgs = Msgs,procs=[OldProc|RestProcs]};
@@ -165,6 +176,12 @@ eval_proc_opt(RestSystem, CurProc) ->
           {tau,_,_} ->  ?RULE_SEQ;
           {process_flag,_,_,_} ->  ?RULE_PROCESS_FLAG;
           {exit,_,_,_}->?RULE_SEQ;
+          {exit,_,_,Type,DestPid,Reason,Time}->
+            Signal = #signal{dest = DestPid,from=CurProc#proc.pid,type=Type,reason=Reason,time =Time},
+            case lists:member(Signal,Signals) of
+              true->?RULE_SEQ;
+              false->?NULL_RULE
+            end;
           {error,_,_,_}->?RULE_SEQ;
           {signal,_,_,_,_,_,_}->?RULE_SIGNAL;
           {signal,From,error,Reason,Time}->%%nel caso di errore e flag=true

@@ -1678,15 +1678,20 @@ draw_named_arrow(Label, FromName, ToName, FromPos, ToPos, E, S, DC) ->
                         NewLabel=Label++"\n"++Mess,
                         S3= draw_arrow(FromPos, FromPos, S2, DC),
                         drawStartPoint(S3,DC,FromPos,S3#state.y_pos),
-                        draw_label(NewLabel, FromName, ToName, FromPos, FromPos, S3, DC);
+                        S4=draw_label(NewLabel, FromName, ToName, FromPos, FromPos, S3, DC),
+                        Pos=getActorToPos(S2#state.actors,E,0),
+                        draw_deadline(S2,S2#state.y_pos,Pos,DC),
+                        S4;
                     {_,signal}->
                         S3=draw_arrow(FromPos,FromPos,S2,DC),
                         MirrorSendPos=cercaSpec({propag,signal},E#e.event,queue_to_list(S3#state.events),S3),
                         case MirrorSendPos==null of
                             false->
+                                Val=E#e.event#event.contents,
+                                Time="("++integer_to_list(element(size(Val),Val))++")",
                                 Cont=lists:flatten(io_lib:format("~p", [E#e.event#event.contents])),
                                 FromPosY=Y-((E#e.pos-MirrorSendPos)*?incr_y*S3#state.scale),
-                                drawTest(Cont,FromPos,ToPos,FromPosY,S3,DC),
+                                drawTest(Cont++Time,FromPos,ToPos,FromPosY,S3,DC),
                                 S4=draw_arrow_async(FromPos,FromPosY,ToPos, S3, DC),
                                 Mess=getPropagMess(E#e.event#event.contents),
                                 NewLabel="propag\n"++Mess,
@@ -1889,7 +1894,7 @@ draw_lifeline(S,LineTopY,NumActor,DC)->%draws the big green line of life of an a
     wxPen:setWidth(S#state.pen,1).
 
  %%Algorithm looks for mirror events
-cercaSpec({signal,'receive'},Event,Events,S)->%Taken as input the receive event and the queue of all events, look for the mirror send!
+cercaSpec({signal,'receive'},Event,Events,S)->%Taken as input the receive event and the queue of all events, look for the mirror signal!
     {Signal,signal}=lists:keyfind(signal,2,S#state.async_patterns),%the send label according to the asynchronous communication pattern
     Receive=Event#event.label,
     Cont=Event#event.contents,

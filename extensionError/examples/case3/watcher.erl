@@ -13,7 +13,7 @@ main()->
 child(Flag,Pid)->
 	process_flag(trap_exit,Flag),
         Pid!Pid,
-	3/1,
+	3/0,
 	self().
 
 startSupervision()->

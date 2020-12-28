@@ -163,9 +163,10 @@ eval_seq_1(Env,Flag,Exp) ->
                       Reason=cerl:concrete(hd(CallArgs)),
                       {Env,null,{error,Reason}};
                     {{c_literal,_,'erlang'},{c_literal,_,'exit'}} ->
-                      %%NB: PER ORA,si intende solo la exit(Reason),non exit(Pid,Reason)!!
-                      Reason=cerl:concrete(hd(CallArgs)),
-                      {Env,null,{exit,Reason}};
+                      case CallArgs of
+                        [CPid,CReason]->{Env,cerl:c_atom(true),{exit,CPid,CReason}};
+                        _-> {Env,null,{exit,cerl:concrete(hd(CallArgs))}}
+                      end;
                     {{c_literal,_,'erlang'},{c_literal,_,'spawn'}} ->
                       VarNum = ref_lookup(?FRESH_VAR),
                       ref_add(?FRESH_VAR, VarNum + 1),
@@ -392,6 +393,19 @@ eval_step(System, Pid) ->
           NewHist=[{exit,Env,Exp,Reason}|Hist],
           NewProc=Proc#proc{hist=NewHist,exp=cerl:abstract({exit,Reason})},
           System#sys{msgs = Msgs,signals=Signals,procs=[NewProc|RestProcs]};
+        {exit,DestPid,Reason}->
+          Time = ref_lookup(?FRESH_TIME),
+          ref_add(?FRESH_TIME, Time + 1),
+          Type=case cerl:concrete(Reason) of
+              normal->normal;
+              kill->killer;
+              _->error
+            end,
+          NewSignal = #signal{dest = DestPid,from=Pid,type=Type,reason=Reason,time = Time},
+          NewSignals = [NewSignal|Signals],
+          NewHist=[{exit,Env,Exp,Type,DestPid,Reason,Time}|Hist],
+          NewProc=Proc#proc{hist=NewHist,exp=NewExp},
+          System#sys{msgs = Msgs,signals=NewSignals,procs=[NewProc|RestProcs]};
         {error,Reason}->
           NewHist=[{error,Env,Exp,Reason}|Hist],
           NewProc=Proc#proc{hist=NewHist,exp=cerl:abstract({error,Reason,stack})},
@@ -599,7 +613,7 @@ eval_procs_opts(#sys{procs = [CurProc|RestProcs]}) ->
         true->
           [#opt{sem = ?MODULE, type = ?TYPE_PROC, id = cerl:concrete(Pid),rule=?RULE_PROPAG}|eval_procs_opts(#sys{procs = RestProcs})];
         false->
-          eval_procs_opts(#sys{procs = RestProcs})%%sarebbe solo questa linea senza tutti i case!!!
+          eval_procs_opts(#sys{procs = RestProcs})%%sarebbe solo questa linea senza il case sopra!!!
       end;
     Opt ->
       [Opt#opt{sem = ?MODULE, type = ?TYPE_PROC, id = cerl:concrete(Pid)}|eval_procs_opts(#sys{procs = RestProcs})]

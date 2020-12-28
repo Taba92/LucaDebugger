@@ -44,6 +44,13 @@ eval_step(System, Pid) ->
       LogSystem = System#sys{roll = NewLog},
       ?LOG("ROLLing back SPAWN_LINK of " ++ ?TO_STRING(cerl:concrete(SpawnPid))),
       roll_spawn_link(LogSystem, Pid, SpawnPid);
+    {exit,_,_,Type,DestPid,Reason,Time}->
+      NewLog = System#sys.roll ++ utils:gen_log_exit(Pid,DestPid,Type,Reason,Time),
+      LogSystem = System#sys{roll = NewLog},
+      ?LOG("ROLLing back EXIT/2 to " ++ ?TO_STRING(cerl:concrete(DestPid))),
+      {NewSystem,_}=roll_signal({Type,DestPid,Reason,Time},{LogSystem,Pid}),
+      RollOpts = roll_opts(NewSystem, Pid),
+      cauder:eval_step(NewSystem, hd(RollOpts));
     {propag,_,_,_,_,Signals}->
       NewLog = System#sys.roll ++ utils:gen_log_propag(Pid,Signals),
       LogSystem = System#sys{roll = NewLog},
@@ -70,6 +77,13 @@ roll_signal({LinkPid,normal,Time},{System,Pid})->
       true->{System,Pid};
       _->NewSystem=eval_step(System,LinkPid),
         roll_signal({LinkPid,normal,Time},{NewSystem,Pid})
+  end;
+roll_signal({Type,DestPid,Reason,Time},{System,Pid})->
+   Signal=#signal{dest=DestPid,from=Pid,type=Type,reason=Reason,time=Time},
+   case lists:member(Signal,System#sys.signals) of
+      true->{System,Pid};
+      _->NewSystem=eval_step(System,DestPid),
+        roll_signal({Type,DestPid,Reason,Time},{NewSystem,Pid})
   end.
 
 roll_send(System, Pid, OtherPid, Time) ->

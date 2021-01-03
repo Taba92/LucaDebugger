@@ -156,6 +156,9 @@ eval_seq_1(Env,Flag,Exp) ->
                   {NewEnv,NewExp,Label};
                 false ->
                   case {CallModule, CallName} of
+                    {{c_literal,_,'erlang'},{c_literal,_,'unlink'}} ->
+                      [LinkPid]=CallArgs,
+                      {Env,cerl:abstract(true),{unlink,LinkPid}};
                     {{c_literal,_,'erlang'},{c_literal,_,'process_flag'}} ->
                       NewFlag=lists:nth(2,CallArgs),
                       {Env,Flag,{process_flag,NewFlag}};
@@ -383,6 +386,19 @@ eval_step(System, Pid) ->
         tau ->
           NewProc = Proc#proc{hist = [{tau,Env,Exp}|Hist], env = NewEnv, exp = NewExp},
           System#sys{msgs = Msgs,signals=Signals, procs = [NewProc|RestProcs]};
+        {unlink,LinkPid}->
+            case utils:exist_link(Procs,Proc,LinkPid) of
+              true->
+                  {LinkProc,RemainProcs}=utils:select_proc(RestProcs,LinkPid),
+                  NewHist=[{unlink,exist,Env,Exp,LinkPid}|Hist],
+                  NewProc=Proc#proc{hist=NewHist,env=NewEnv,exp=NewExp,links=Links--[LinkPid]},
+                  NewLinkProc=LinkProc#proc{links=LinkProc#proc.links--[Pid]},
+                  System#sys{msgs = Msgs,signals=Signals, procs = [NewProc|[NewLinkProc|RemainProcs]]};
+              false->
+                NewHist=[{unlink,no_exist,Env,Exp,LinkPid}|Hist],
+                NewProc=Proc#proc{hist=NewHist,env=NewEnv,exp=NewExp},
+                System#sys{msgs = Msgs,signals=Signals, procs = [NewProc|RestProcs]}
+            end;
         {process_flag,NewFlag}->
           NewHist=[{process_flag,Env,Exp,Flag}|Hist],
           NewProc=Proc#proc{flag=NewFlag,hist=NewHist,env=NewEnv,exp=NewExp},

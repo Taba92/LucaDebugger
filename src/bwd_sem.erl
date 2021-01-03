@@ -26,6 +26,14 @@ eval_step(System, Pid) ->
     {tau, OldEnv, OldExp} ->
       OldProc = Proc#proc{hist = RestHist, env = OldEnv, exp = OldExp},
       System#sys{msgs = Msgs, procs = [OldProc|RestProcs]};
+    {unlink,exist,OldEnv,OldExp,LinkPid}->
+        {ProcLink,OldRestProcs} = utils:select_proc(RestProcs,LinkPid),
+        OldProc=Proc#proc{hist=RestHist,env=OldEnv,exp=OldExp,links=[LinkPid|Links]},
+        OldProcLink=ProcLink#proc{links=[Pid|ProcLink#proc.links]},
+        System#sys{msgs = Msgs, procs = [OldProc|[OldProcLink|OldRestProcs]]};
+    {unlink,no_exist,OldEnv,OldExp,_}->
+      OldProc=Proc#proc{hist=RestHist,env=OldEnv,exp=OldExp},
+      System#sys{msgs = Msgs, procs = [OldProc|RestProcs]};
     {process_flag,OldEnv,OldExp,OldFlag}->
       OldProc=Proc#proc{flag=OldFlag,hist=RestHist,env=OldEnv,exp=OldExp},
       TraceItem = #trace{type = ?RULE_PROCESS_FLAG,from = Pid,val=Flag},
@@ -175,6 +183,7 @@ eval_proc_opt(RestSystem, CurProc) ->
         case CurHist of
           {tau,_,_} ->  ?RULE_SEQ;
           {process_flag,_,_,_} ->  ?RULE_PROCESS_FLAG;
+          {unlink,_,_,_,_}->?RULE_SEQ;
           {exit,_,_,_}->?RULE_SEQ;
           {exit,_,_,Type,DestPid,Reason,Time}->
             Signal = #signal{dest = DestPid,from=CurProc#proc.pid,type=Type,reason=Reason,time =Time},

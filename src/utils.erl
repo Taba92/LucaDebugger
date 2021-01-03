@@ -4,7 +4,7 @@
 %%%-------------------------------------------------------------------
 
 -module(utils).
--export([fwd_propag/2,deliver_signal/2,bwd_propag/2,check_bwd_propag/2,
+-export([exist_link/3,fwd_propag/2,deliver_signal/2,bwd_propag/2,check_bwd_propag/2,
           is_not_a_signal_message/3,is_signal_msg_top/2,fundef_lookup/2, fundef_rename/1, substitute/2,
          build_var/1, build_var/2, pid_exists/2,
          select_proc/2, select_msg/2,select_signal/2,
@@ -124,6 +124,10 @@ pid_exists(Procs, Pid) ->
 
 %%aggiunte luca
 
+exist_link(Procs,Proc,LinkPid)->
+  {LinkProc,_}=select_proc(Procs,LinkPid),
+  lists:member(LinkPid,Proc#proc.links) andalso lists:member(Proc#proc.pid,LinkProc#proc.links).
+  
 %%roll back a propagation
 bwd_propag({LinkPid,error,Reason,Time},{Signals,From})->
    Signal=#signal{dest=LinkPid,from=From,type=error,reason=Reason,time=Time},

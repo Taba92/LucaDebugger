@@ -200,7 +200,18 @@ deliver_signal(Proc,#signal{from=From,type=killer,time=Time})->
   NewExp=cerl:abstract({exit,killed}),
   NewLinks=lists:delete(From,Links),
   NewHist=[{signal,From,killed,Env,Exp,Mail,Time}|Hist],
-  #proc{pid=Pid,links=NewLinks,hist=NewHist,exp=NewExp}.
+  #proc{pid=Pid,links=NewLinks,hist=NewHist,exp=NewExp};
+deliver_signal(Proc,#signal{from=From,type=unlink,time=Time})->
+  #proc{pid=Pid,links=Links,hist=Hist,env=Env,exp=Exp}=Proc,
+  case lists:member(From,Links) of
+    true->
+      NewHist=[{signal,unlink,exist,Env,Exp,From,Time}|Hist],
+      Proc#proc{hist=NewHist,links=Links--[From]};
+    false->
+      NewHist=[{signal,unlink,no_exist,Env,Exp,From,Time}|Hist],
+      Proc#proc{hist=NewHist}
+  end.
+
 
 is_not_a_signal_message(Msg,[SignalHist|RestHist],Bool)when (element(1,SignalHist))==signal->
   {_,TimeMsg}=Msg,
@@ -532,6 +543,9 @@ pp_hist_2({propag,_,_,_,_,HistVal}) ->
       Reason=element(3,hd(HistVal)),
       "propag_error{"++atom_to_list(Reason)++"(" ++ [{?CAUDER_GREEN, LinksString}] ++ ")}"
     end;
+
+pp_hist_2({signal,unlink,_,_,_,FromPid,Time}) ->
+  "got_signal(" ++ [{?CAUDER_GREEN, pp(FromPid)}] ++","++[{?wxRED, integer_to_list(Time)}]++ ")";
 pp_hist_2({signal,FromPid,_,_,Time}) ->
   "got_signal(" ++ [{?CAUDER_GREEN, pp(FromPid)}] ++","++[{?wxRED, integer_to_list(Time)}]++")";
 pp_hist_2({signal,FromPid,_,_,_,_,Time}) ->

@@ -26,14 +26,16 @@ eval_step(System, Pid) ->
     {tau, OldEnv, OldExp} ->
       OldProc = Proc#proc{hist = RestHist, env = OldEnv, exp = OldExp},
       System#sys{msgs = Msgs, procs = [OldProc|RestProcs]};
-    {unlink,exist,OldEnv,OldExp,LinkPid}->
-        {ProcLink,OldRestProcs} = utils:select_proc(RestProcs,LinkPid),
-        OldProc=Proc#proc{hist=RestHist,env=OldEnv,exp=OldExp,links=[LinkPid|Links]},
-        OldProcLink=ProcLink#proc{links=[Pid|ProcLink#proc.links]},
-        System#sys{msgs = Msgs, procs = [OldProc|[OldProcLink|OldRestProcs]]};
-    {unlink,no_exist,OldEnv,OldExp,_}->
+    {unlink,exist,OldEnv,OldExp,LinkPid,Time}->
+      Signal = #signal{dest = LinkPid,from=Pid,type=unlink,time =Time},
+      OldSignals=lists:delete(Signal,Signals),
+      OldProc=Proc#proc{hist=RestHist,env=OldEnv,exp=OldExp,links=[LinkPid|Links]},
+      System#sys{msgs = Msgs,signals=OldSignals, procs = [OldProc|RestProcs]};
+    {unlink,no_exist,OldEnv,OldExp,LinkPid,Time}->
+      Signal = #signal{dest = LinkPid,from=Pid,type=unlink,time =Time},
+      OldSignals=lists:delete(Signal,Signals),
       OldProc=Proc#proc{hist=RestHist,env=OldEnv,exp=OldExp},
-      System#sys{msgs = Msgs, procs = [OldProc|RestProcs]};
+      System#sys{msgs = Msgs,signals=OldSignals, procs = [OldProc|RestProcs]};
     {process_flag,OldEnv,OldExp,OldFlag}->
       OldProc=Proc#proc{flag=OldFlag,hist=RestHist,env=OldEnv,exp=OldExp},
       TraceItem = #trace{type = ?RULE_PROCESS_FLAG,from = Pid,val=Flag},
@@ -46,6 +48,18 @@ eval_step(System, Pid) ->
       OldProc=Proc#proc{links=OldLinks,hist=RestHist,env=OldEnv,exp=OldExp,mail=OldMail},
       OldTrace = [Track||Track<-Trace,Track#trace.type/=?RULE_PROPAG orelse Track#trace.from/=Pid],
       System#sys{msgs=Msgs,signals=OldSignals,procs=[OldProc|RestProcs],trace=OldTrace};
+    {signal,unlink,exist,OldEnv,OldExp,From,Time}->
+      OldSignal=#signal{dest=Pid,from=From,type=unlink,time=Time},
+      OldProc=Proc#proc{links=[From|Links],hist=RestHist,env=OldEnv,exp=OldExp},
+      TraceItem = #trace{type = ?RULE_SIGNAL, from = From, val = {unlink,undefined},to=Pid,time=Time},
+      OldTrace = lists:delete(TraceItem, Trace),
+       System#sys{signals=[OldSignal|Signals],procs=[OldProc|RestProcs],trace=OldTrace};
+    {signal,unlink,no_exist,OldEnv,OldExp,From,Time}->
+      OldSignal=#signal{dest=Pid,from=From,type=unlink,time=Time},
+      OldProc=Proc#proc{hist=RestHist,env=OldEnv,exp=OldExp},
+      TraceItem = #trace{type = ?RULE_SIGNAL, from = From, val = {unlink,undefined},to=Pid,time=Time},
+      OldTrace = lists:delete(TraceItem, Trace),
+      System#sys{signals=[OldSignal|Signals],procs=[OldProc|RestProcs],trace=OldTrace};
     {signal,From,error,OldEnv,OldExp,OldMail,Time}->
       Reason=element(2,cerl:concrete(Proc#proc.exp)),
       TraceItem = #trace{type = ?RULE_SIGNAL, from = From, val = {error,Reason},to=Pid,time=Time},
@@ -183,7 +197,12 @@ eval_proc_opt(RestSystem, CurProc) ->
         case CurHist of
           {tau,_,_} ->  ?RULE_SEQ;
           {process_flag,_,_,_} ->  ?RULE_PROCESS_FLAG;
-          {unlink,_,_,_,_}->?RULE_SEQ;
+          {unlink,_,_,_,LinkPid,Time}->
+            Signal = #signal{dest = LinkPid,from=CurProc#proc.pid,type=unlink,time =Time},
+            case lists:member(Signal,Signals) of
+              true->?RULE_SEQ;
+              false->?NULL_RULE
+            end;
           {exit,_,_,_}->?RULE_SEQ;
           {exit,_,_,Type,DestPid,Reason,Time}->
             Signal = #signal{dest = DestPid,from=CurProc#proc.pid,type=Type,reason=Reason,time =Time},

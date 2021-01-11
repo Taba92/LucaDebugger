@@ -387,18 +387,18 @@ eval_step(System, Pid) ->
           NewProc = Proc#proc{hist = [{tau,Env,Exp}|Hist], env = NewEnv, exp = NewExp},
           System#sys{msgs = Msgs,signals=Signals, procs = [NewProc|RestProcs]};
         {unlink,LinkPid}->
-            case utils:exist_link(Procs,Proc,LinkPid) of
-              true->
-                  {LinkProc,RemainProcs}=utils:select_proc(RestProcs,LinkPid),
-                  NewHist=[{unlink,exist,Env,Exp,LinkPid}|Hist],
-                  NewProc=Proc#proc{hist=NewHist,env=NewEnv,exp=NewExp,links=Links--[LinkPid]},
-                  NewLinkProc=LinkProc#proc{links=LinkProc#proc.links--[Pid]},
-                  System#sys{msgs = Msgs,signals=Signals, procs = [NewProc|[NewLinkProc|RemainProcs]]};
-              false->
-                NewHist=[{unlink,no_exist,Env,Exp,LinkPid}|Hist],
-                NewProc=Proc#proc{hist=NewHist,env=NewEnv,exp=NewExp},
-                System#sys{msgs = Msgs,signals=Signals, procs = [NewProc|RestProcs]}
-            end;
+          Time = ref_lookup(?FRESH_TIME),
+          ref_add(?FRESH_TIME, Time + 1),
+          NewSignal = #signal{dest = LinkPid,from=Pid,type=unlink,time = Time},
+          NewProc=case lists:member(LinkPid,Links) of
+            true->
+              NewHist=[{unlink,exist,Env,Exp,LinkPid,Time}|Hist],
+              Proc#proc{hist=NewHist,env=NewEnv,exp=NewExp,links=Links--[LinkPid]};
+            false->
+              NewHist=[{unlink,no_exist,Env,Exp,LinkPid,Time}|Hist],
+              Proc#proc{hist=NewHist,env=NewEnv,exp=NewExp}
+          end,
+          System#sys{msgs = Msgs,signals=[NewSignal|Signals], procs = [NewProc|RestProcs]};
         {process_flag,NewFlag}->
           NewHist=[{process_flag,Env,Exp,Flag}|Hist],
           NewProc=Proc#proc{flag=NewFlag,hist=NewHist,env=NewEnv,exp=NewExp},

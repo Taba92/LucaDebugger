@@ -1,13 +1,14 @@
 -module(test).
--export([main/0,client/1,server/0]).
+-export([main/0,client/0,server/0]).
 
 main()->
-	Pid=spawn(?MODULE,server,[]),
-	spawn(?MODULE,client,[Pid]).
+	spawn(?MODULE,client,[]).
 
-client(Pid)->
+client()->
+	Pid=spawn_link(?MODULE,server,[]),
 	unlink(Pid),
 	Pid ! ciao.
 
 server()->
+	self(),
 	4+3.

@@ -496,10 +496,12 @@ eval_signal(System,Id)->
   {Signal,RestSignals}=utils:select_signal(Signals,Id),
   #signal{dest=LinkPid,from=From,type=Type,reason=Reason,time=Time}=Signal,
   {Proc,RestProcs}=utils:select_proc(Procs,LinkPid),
-  NewProc=utils:deliver_signal(Proc,Signal),
   TraceItem = #trace{type = ?RULE_SIGNAL, from = From, val = {Type,Reason},to=LinkPid, time = Time},
   NewTrace = [TraceItem|Trace],
-  System#sys{signals=RestSignals,procs=[NewProc|RestProcs],trace=NewTrace}.
+  case utils:deliver_signal(Procs,Proc,Signal) of
+    {NewProc,NewLink}->System#sys{signals=RestSignals,procs=[NewProc|[NewLink|RestProcs]],trace=NewTrace};
+    NewProc->System#sys{signals=RestSignals,procs=[NewProc|RestProcs],trace=NewTrace}
+  end.
 
 %%--------------------------------------------------------------------
 %% @doc Performs an evaluation step in message Id, given System

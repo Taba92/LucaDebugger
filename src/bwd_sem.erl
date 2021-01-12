@@ -197,6 +197,13 @@ eval_proc_opt(RestSystem, CurProc) ->
         case CurHist of
           {tau,_,_} ->  ?RULE_SEQ;
           {process_flag,_,_,_} ->  ?RULE_PROCESS_FLAG;
+          {link,no_link,_,_}->?RULE_SEQ;
+          {link,signal,_,_,LinkPid,Time}->
+            Signal = #signal{dest = LinkPid,from=CurProc#proc.pid,type=link,time =Time},
+            case lists:member(Signal,Signals) of
+              true->?RULE_SEQ;
+              false->?NULL_RULE
+            end;
           {unlink,_,_,_,LinkPid,Time}->
             Signal = #signal{dest = LinkPid,from=CurProc#proc.pid,type=unlink,time =Time},
             case lists:member(Signal,Signals) of

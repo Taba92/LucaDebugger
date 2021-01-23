@@ -11,4 +11,4 @@ launcher()->
 	receive M->io:fwrite("~p~n",[M]) end.
 
 exiter(Pid)->
-	exit(Pid,normal).
+	exit(Pid,kill).

@@ -398,7 +398,9 @@ eval_step(System, Pid) ->
               NewHist=[{unlink,no_exist,Env,Exp,LinkPid,Time}|Hist],
               Proc#proc{hist=NewHist,env=NewEnv,exp=NewExp}
           end,
-          System#sys{msgs = Msgs,signals=[NewSignal|Signals], procs = [NewProc|RestProcs]};
+          TraceItem = #trace{type = ?RULE_UNLINK,from = Pid,to=LinkPid,time=Time},
+          NewTrace = [TraceItem|Trace],
+          System#sys{msgs = Msgs,signals=[NewSignal|Signals], procs = [NewProc|RestProcs],trace=NewTrace};
         {process_flag,NewFlag}->
           NewHist=[{process_flag,Env,Exp,Flag}|Hist],
           NewProc=Proc#proc{flag=NewFlag,hist=NewHist,env=NewEnv,exp=NewExp},
@@ -417,11 +419,13 @@ eval_step(System, Pid) ->
               kill->{killer,R};
               _->{error,R}
             end,
+          TraceItem = #trace{type = ?RULE_EXIT, from = Pid, to = DestPid, val = R, time = Time},
+          NewTrace = [TraceItem|Trace],
           NewSignal = #signal{dest = DestPid,from=Pid,type=Type,reason=Reason,time = Time},
           NewSignals = [NewSignal|Signals],
           NewHist=[{exit,Env,Exp,Type,DestPid,Reason,Time}|Hist],
           NewProc=Proc#proc{hist=NewHist,exp=NewExp},
-          System#sys{msgs = Msgs,signals=NewSignals,procs=[NewProc|RestProcs]};
+          System#sys{msgs = Msgs,signals=NewSignals,procs=[NewProc|RestProcs],trace=NewTrace};
         {error,Reason}->
           NewHist=[{error,Env,Exp,Reason}|Hist],
           NewProc=Proc#proc{hist=NewHist,exp=cerl:abstract({error,Reason,stack})},
@@ -717,6 +721,8 @@ eval_exp_opt(Exp, Env, Mail) ->
                         {{c_literal, _, 'erlang'},{c_literal, _, 'spawn_link'}} -> #opt{rule = ?RULE_SPAWN_LINK};
                         {{c_literal, _, 'erlang'},{c_literal, _, 'self'}} -> #opt{rule = ?RULE_SELF};
                         {{c_literal, _, 'erlang'},{c_literal, _, '!'}} -> #opt{rule = ?RULE_SEND};
+                        {{c_literal, _, 'erlang'},{c_literal, _, 'unlink'}} -> #opt{rule = ?RULE_UNLINK};
+                        {{c_literal, _, 'erlang'},{c_literal, _, 'exit'}}when length(CallArgs)==2 -> #opt{rule = ?RULE_EXIT};
                         _ -> #opt{rule = ?RULE_SEQ}
                       end
                   end

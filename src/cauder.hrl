@@ -28,6 +28,8 @@
 -define(RULE_SELF,     self).
 -define(RULE_SCHED,    sched).
 -define(RULE_SIGNAL,    signal).
+-define(RULE_UNLINK, unlink).
+-define(RULE_EXIT, exit_signal).
 
 % ets defs
 -define(APP_REF, '_._app').

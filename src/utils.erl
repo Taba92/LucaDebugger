@@ -196,11 +196,10 @@ deliver_signal(_,Proc,#signal{from=From,type=normal,time=Time})->
   end,
   NewProc;
 deliver_signal(_,Proc,#signal{from=From,type=killer,time=Time})->
-  #proc{pid=Pid,links=Links,hist=Hist,env=Env,exp=Exp,mail=Mail}=Proc,
+  #proc{hist=Hist,env=Env,exp=Exp,mail=Mail}=Proc,
   NewExp=cerl:abstract({exit,killed}),
-  NewLinks=lists:delete(From,Links),
   NewHist=[{signal,From,killed,Env,Exp,Mail,Time}|Hist],
-  #proc{pid=Pid,links=NewLinks,hist=NewHist,exp=NewExp};
+  Proc#proc{hist=NewHist,exp=NewExp};
 deliver_signal(_,Proc,#signal{from=From,type=unlink,time=Time})->
   #proc{pid=Pid,links=Links,hist=Hist,env=Env,exp=Exp}=Proc,
   case lists:member(From,Links) of
@@ -495,6 +494,8 @@ is_conc_item({spawn_link,_,_,_}) -> true;
 is_conc_item({propag,_,_,_,_,_}) -> true;
 is_conc_item({signal,_,_,_,_,_,_}) -> true;
 is_conc_item({signal,_,_,_,_}) -> true;
+is_conc_item({unlink,_,_,_,_,_})->true;
+is_conc_item({exit,_,_,_,_,_,_})->true;
 is_conc_item(_) -> false.
 
 pp_hist(Hist, Opts) ->
@@ -516,12 +517,14 @@ pp_hist_2({tau,_,_}) ->
   "seq";
 pp_hist_2({self,_,_}) ->
   "self";
+pp_hist_2({unlink,_,_,_,DestPid,_})->
+  "unlink("++[{?CAUDER_GREEN, pp(DestPid)}]++")";
+pp_hist_2({exit,_,_,_,_,Reason,Time})->
+  "send_exit_signal("++[{?CAUDER_GREEN, pp(Reason)}]++[{?wxRED, integer_to_list(Time)}]++")";
 pp_hist_2({error,_,_,Reason}) ->
   "error("++atom_to_list(Reason)++")";
 pp_hist_2({exit,_,_,Reason}) ->
   "exit("++atom_to_list(Reason)++")";
-pp_hist_2({exit,_,_,_,_,Reason,Time}) ->
-  "exit(" ++ pp(Reason) ++ "," ++ [{?wxRED, integer_to_list(Time)}] ++ ")";
 pp_hist_2({spawn,_,_,Pid}) ->
   "spawn(" ++ [{?CAUDER_GREEN, pp(Pid)}] ++ ")";
 pp_hist_2({send,_,_,_,{Value,Time}}) ->
@@ -607,7 +610,9 @@ pp_trace_item(#trace{type = Type,
     ?RULE_RECEIVE -> pp_trace_receive(From, Val, Time);
     ?RULE_PROCESS_FLAG -> pp_trace_flag(From,Val);
     ?RULE_SIGNAL -> pp_trace_signal(From,Val,To,Time);
-    ?RULE_PROPAG -> pp_trace_propag(From, To,Val)
+    ?RULE_PROPAG -> pp_trace_propag(From, To,Val);
+    ?RULE_UNLINK -> pp_trace_unlink(From,To,Time);
+    ?RULE_EXIT -> pp_trace_exit(From,To,Val,Time)
   end.
 
 pp_trace_send(From, To, Val, Time) ->
@@ -635,6 +640,12 @@ pp_trace_propag(From, To,HistVal) ->
       Reason=element(3,hd(HistVal)),
       [pp_pid(From)," propagated {"++atom_to_list(Type)++","++atom_to_list(Reason)++"} to ",pp_links(To)]
     end.
+
+pp_trace_unlink(From,To,Time)->
+  [pp_pid(From)," unlink from ",pp_pid(To)," (",integer_to_list(Time),")"].
+
+pp_trace_exit(From,To,Val,Time)->
+  [pp_pid(From)," send exit signal ",pp(Val)," to",pp_pid(To)," (",integer_to_list(Time),")"].
 
 pp_trace_receive(From, Val, Time) ->
   [pp_pid(From)," receives ",pp(Val)," (",integer_to_list(Time),")"].

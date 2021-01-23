@@ -1,6 +1,6 @@
-# CauDEr
+# LucaCauDEr
 
-A causal-consistent debugger for Erlang
+A branch of the causal-consistent debugger for Erlang Cauder
 
 ## Dependencies
 

@@ -26,6 +26,26 @@ eval_step(System, Pid) ->
     {tau, OldEnv, OldExp} ->
       OldProc = Proc#proc{hist = RestHist, env = OldEnv, exp = OldExp},
       System#sys{msgs = Msgs, procs = [OldProc|RestProcs]};
+    {link,no_link,OldEnv,OldExp,LinkPid,Time}->
+      TraceItem = #trace{type = ?RULE_LINK, from = Pid,to=LinkPid,time=Time},
+      OldTrace = lists:delete(TraceItem, Trace),
+      OldProc=Proc#proc{hist=RestHist,env=OldEnv,exp=OldExp},
+      System#sys{msgs = Msgs,signals=Signals, procs = [OldProc|RestProcs],trace=OldTrace};
+    {link,set_link,OldEnv,OldExp,LinkPid,Time}->
+      {LinkProc, OtherProcs} = utils:select_proc(RestProcs, LinkPid),
+      #proc{links=DestLinks}=LinkProc,
+      TraceItem = #trace{type = ?RULE_LINK, from = Pid,to=LinkPid,time=Time},
+      OldTrace = lists:delete(TraceItem, Trace),
+      OldProc=Proc#proc{hist=RestHist,env=OldEnv,exp=OldExp,links=Links--[LinkPid]},
+      OldLinkProc=LinkProc#proc{links=DestLinks--[Pid]},
+      System#sys{msgs = Msgs,signals=Signals, procs =[OldProc|[OldLinkProc|OtherProcs]],trace=OldTrace};
+    {link,error,OldEnv,OldExp,LinkPid,Time}->
+      Signal =#signal{dest =Pid,from=Pid,type=error, reason=noproc,time = Time},
+      TraceItem = #trace{type = ?RULE_LINK, from = Pid,to=LinkPid,time=Time},
+      OldTrace = lists:delete(TraceItem, Trace),
+      OldSignals=lists:delete(Signal,Signals),
+      OldProc=Proc#proc{hist=RestHist,env=OldEnv,exp=OldExp},
+      System#sys{msgs = Msgs,signals=OldSignals, procs =[OldProc|RestProcs],trace=OldTrace};
     {unlink,exist,OldEnv,OldExp,LinkPid,Time}->
       Signal = #signal{dest = LinkPid,from=Pid,type=unlink,time =Time},
       OldSignals=lists:delete(Signal,Signals),
@@ -203,11 +223,17 @@ eval_proc_opt(RestSystem, CurProc) ->
         case CurHist of
           {tau,_,_} ->  ?RULE_SEQ;
           {process_flag,_,_,_} ->  ?RULE_PROCESS_FLAG;
-          {link,no_link,_,_}->?RULE_SEQ;
-          {link,signal,_,_,LinkPid,Time}->
-            Signal = #signal{dest = LinkPid,from=CurProc#proc.pid,type=link,time =Time},
+          {link,no_link,_,_,_,_}->?RULE_LINK;
+          {link,set_link,_,_,LinkPid,_}->
+            {LinkProc,_} = utils:select_proc(RestProcs, LinkPid),
+            case utils:exist_link(CurProc,LinkProc,full) of
+              true->?RULE_LINK;
+              false->?NULL_RULE
+            end;
+          {link,error,_,_,_,Time}->
+            Signal =#signal{dest =CurProc#proc.pid,from=CurProc#proc.pid,type=error, reason=noproc,time = Time},
             case lists:member(Signal,Signals) of
-              true->?RULE_SEQ;
+              true->?RULE_LINK;
               false->?NULL_RULE
             end;
           {unlink,_,_,_,LinkPid,Time}->

@@ -5,8 +5,8 @@ main()->
 	spawn(?MODULE,client,[]).
 
 client()->
-	Pid=spawn_link(?MODULE,server,[]),
-	unlink(Pid),
+	Pid=spawn(?MODULE,server,[]),
+	link(Pid),
 	Pid ! ciao.
 
 server()->

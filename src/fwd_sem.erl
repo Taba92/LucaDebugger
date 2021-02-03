@@ -159,6 +159,9 @@ eval_seq_1(Env,Flag,Exp) ->
                     {{c_literal,_,'erlang'},{c_literal,_,'unlink'}} ->
                       [LinkPid]=CallArgs,
                       {Env,cerl:abstract(true),{unlink,LinkPid}};
+                    {{c_literal,_,'erlang'},{c_literal,_,'link'}} ->
+                      [LinkPid]=CallArgs,
+                      {Env,cerl:abstract(true),{link,LinkPid}};
                     {{c_literal,_,'erlang'},{c_literal,_,'process_flag'}} ->
                       NewFlag=lists:nth(2,CallArgs),
                       {Env,Flag,{process_flag,NewFlag}};
@@ -401,6 +404,30 @@ eval_step(System, Pid) ->
           TraceItem = #trace{type = ?RULE_UNLINK,from = Pid,to=LinkPid,time=Time},
           NewTrace = [TraceItem|Trace],
           System#sys{msgs = Msgs,signals=[NewSignal|Signals], procs = [NewProc|RestProcs],trace=NewTrace};
+         {link,LinkPid}->
+          Time = ref_lookup(?FRESH_TIME),
+          ref_add(?FRESH_TIME, Time + 1),
+          {LinkProc, OtherProcs} = utils:select_proc(RestProcs, LinkPid),
+          #proc{links=DestLinks}=LinkProc,
+          TraceItem = #trace{type = ?RULE_LINK,from = Pid,to=LinkPid,time=Time},
+          NewTrace = [TraceItem|Trace],
+          case is_exp(LinkProc#proc.exp) of
+              true->%%if the dest proc is alive
+                case utils:exist_link(Proc,LinkProc,half) of
+                  true->NewHist=[{link,no_link,Env,Exp,LinkPid,Time}|Hist],
+                        NewProc=Proc#proc{hist=NewHist,env=NewEnv,exp=NewExp},
+                        System#sys{msgs = Msgs,signals=Signals,procs=[NewProc|RestProcs],trace=NewTrace};
+                  false->NewHist=[{link,set_link,Env,Exp,LinkPid,Time}|Hist],
+                        NewProc=Proc#proc{hist=NewHist,env=NewEnv,links=Links++[LinkPid],exp=NewExp},
+                        NewLinkProc=LinkProc#proc{links=DestLinks++[Pid]},
+                        System#sys{msgs = Msgs,signals=Signals,procs=[NewProc|[NewLinkProc|OtherProcs]],trace=NewTrace}
+                end;
+              false->%%if the dest in not alive
+                  NewHist=[{link,error,Env,Exp,LinkPid,Time}|Hist],
+                  NewProc=Proc#proc{hist=NewHist,env=NewEnv,exp=NewExp},
+                  NewSignal = #signal{dest =Pid,from=Pid,type=error, reason=noproc,time = Time},
+                  System#sys{msgs = Msgs,signals=[NewSignal|Signals],procs=[NewProc|RestProcs],trace=NewTrace}
+          end;
         {process_flag,NewFlag}->
           NewHist=[{process_flag,Env,Exp,Flag}|Hist],
           NewProc=Proc#proc{flag=NewFlag,hist=NewHist,env=NewEnv,exp=NewExp},
@@ -722,6 +749,7 @@ eval_exp_opt(Exp, Env, Mail) ->
                         {{c_literal, _, 'erlang'},{c_literal, _, 'self'}} -> #opt{rule = ?RULE_SELF};
                         {{c_literal, _, 'erlang'},{c_literal, _, '!'}} -> #opt{rule = ?RULE_SEND};
                         {{c_literal, _, 'erlang'},{c_literal, _, 'unlink'}} -> #opt{rule = ?RULE_UNLINK};
+                        {{c_literal, _, 'erlang'},{c_literal, _, 'link'}} -> #opt{rule = ?RULE_LINK};
                         {{c_literal, _, 'erlang'},{c_literal, _, 'exit'}}when length(CallArgs)==2 -> #opt{rule = ?RULE_EXIT};
                         _ -> #opt{rule = ?RULE_SEQ}
                       end

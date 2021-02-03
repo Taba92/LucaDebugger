@@ -29,6 +29,7 @@
 -define(RULE_SCHED,    sched).
 -define(RULE_SIGNAL,    signal).
 -define(RULE_UNLINK, unlink).
+-define(RULE_LINK, link).
 -define(RULE_EXIT, exit_signal).
 
 % ets defs

@@ -39,7 +39,8 @@ get_label_from_option(Option) ->
     #opt{rule = ?RULE_SELF}    -> "Self";
     #opt{rule = ?RULE_SIGNAL}    -> "Signal";
     #opt{rule = ?RULE_UNLINK}    -> "Unlink";
-     #opt{rule = ?RULE_EXIT}    -> "ExitSig";
+    #opt{rule = ?RULE_LINK}    -> "Link";
+    #opt{rule = ?RULE_EXIT}    -> "ExitSig";
     #opt{rule = ?RULE_SCHED}   -> ?NULL_LABEL
   end.
 
@@ -56,7 +57,8 @@ get_rule_from_button(Button) ->
      "SpawnLink" ->?RULE_SPAWN_LINK;
      "Self"    -> ?RULE_SELF;
      "ExitSig" -> ?RULE_EXIT;
-     "Unlink"  ->?RULE_UNLINK
+     "Unlink"  ->?RULE_UNLINK;
+     "Link"  ->?RULE_LINK
   end.
 
 button_to_option(Button) ->

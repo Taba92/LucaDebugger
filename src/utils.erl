@@ -124,10 +124,14 @@ pid_exists(Procs, Pid) ->
 
 %%aggiunte luca
 
-exist_link(Procs,Proc,LinkPid)->
-  {LinkProc,_}=select_proc(Procs,LinkPid),
-  lists:member(LinkPid,Proc#proc.links) andalso lists:member(Proc#proc.pid,LinkProc#proc.links).
-  
+exist_link(FromProc,DestProc,half)->
+  {FromPid,DestPid}={FromProc#proc.pid,DestProc#proc.pid},
+  lists:member(FromPid,DestProc#proc.links) orelse lists:member(DestPid,FromProc#proc.links);
+exist_link(FromProc,DestProc,full)->
+  {FromPid,DestPid}={FromProc#proc.pid,DestProc#proc.pid},
+  lists:member(FromPid,DestProc#proc.links) andalso lists:member(DestPid,FromProc#proc.links).
+
+
 %%roll back a propagation
 bwd_propag({LinkPid,error,Reason,Time},{Signals,From})->
    Signal=#signal{dest=LinkPid,from=From,type=error,reason=Reason,time=Time},
@@ -495,6 +499,7 @@ is_conc_item({propag,_,_,_,_,_}) -> true;
 is_conc_item({signal,_,_,_,_,_,_}) -> true;
 is_conc_item({signal,_,_,_,_}) -> true;
 is_conc_item({unlink,_,_,_,_,_})->true;
+is_conc_item({link,_,_,_,_,_})->true;
 is_conc_item({exit,_,_,_,_,_,_})->true;
 is_conc_item(_) -> false.
 
@@ -519,6 +524,8 @@ pp_hist_2({self,_,_}) ->
   "self";
 pp_hist_2({unlink,_,_,_,DestPid,_})->
   "unlink("++[{?CAUDER_GREEN, pp(DestPid)}]++")";
+pp_hist_2({link,_,_,_,DestPid,_})->
+  "link("++[{?CAUDER_GREEN, pp(DestPid)}]++")";
 pp_hist_2({exit,_,_,_,_,Reason,Time})->
   "send_exit_signal("++[{?CAUDER_GREEN, pp(Reason)}]++[{?wxRED, integer_to_list(Time)}]++")";
 pp_hist_2({error,_,_,Reason}) ->
@@ -612,6 +619,7 @@ pp_trace_item(#trace{type = Type,
     ?RULE_SIGNAL -> pp_trace_signal(From,Val,To,Time);
     ?RULE_PROPAG -> pp_trace_propag(From, To,Val);
     ?RULE_UNLINK -> pp_trace_unlink(From,To,Time);
+    ?RULE_LINK -> pp_trace_link(From,To,Time);
     ?RULE_EXIT -> pp_trace_exit(From,To,Val,Time)
   end.
 
@@ -643,6 +651,9 @@ pp_trace_propag(From, To,HistVal) ->
 
 pp_trace_unlink(From,To,Time)->
   [pp_pid(From)," unlink from ",pp_pid(To)," (",integer_to_list(Time),")"].
+
+pp_trace_link(From,To,Time)->
+  [pp_pid(From)," link to ",pp_pid(To)," (",integer_to_list(Time),")"].
 
 pp_trace_exit(From,To,Val,Time)->
   [pp_pid(From)," send exit signal ",pp(Val)," to",pp_pid(To)," (",integer_to_list(Time),")"].

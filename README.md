@@ -2,25 +2,11 @@
 
 A branch of the causal-consistent debugger for Erlang Cauder
 
-## Dependencies
+For general information about Cauder see the link: https://github.com/mistupv/cauder
 
-This project uses [wx](http://erlang.org/doc/apps/wx/chapter.html), the Erlang binding of wxWidgets.  
-Thus, you must have [built Erlang/OTP with wxWidgets](http://erlang.org/doc/installation_guide/INSTALL.html#Advanced-configuration-and-build-of-ErlangOTP_Building_Building-with-wxErlang).
-
-## Compilation
-
-First, compile the project:
-```
-make
-```
-Then, execute the script *cauder.sh* to start CauDEr
-```
-./cauder.sh
-```
-An astonishing graphical interface will appear in your screen.
-
-![GUI screenshot](https://github.com/mistupv/cauder/blob/screens/cauder.png?raw=true)
-
-## How to use
-
-Check the [Wiki](https://github.com/mistupv/cauder/wiki) for information on how to use CauDEr.
+Extension of the debugger:
+-Spawn_link
+-Error/exit.
+-Error/exit signals propagation.
+-Unlink.
+-Link: The links have been implemented not entirely correct as signals would also be used in the case of link setting, instead in Cauder they are implemented in an atomic way 

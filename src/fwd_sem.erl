@@ -407,8 +407,7 @@ eval_step(System, Pid) ->
          {link,LinkPid}->
           Time = ref_lookup(?FRESH_TIME),
           ref_add(?FRESH_TIME, Time + 1),
-          {LinkProc, OtherProcs} = utils:select_proc(RestProcs, LinkPid),
-          #proc{links=DestLinks}=LinkProc,
+          {LinkProc,_} = utils:select_proc(RestProcs, LinkPid),
           TraceItem = #trace{type = ?RULE_LINK,from = Pid,to=LinkPid,time=Time},
           NewTrace = [TraceItem|Trace],
           case is_exp(LinkProc#proc.exp) of
@@ -418,9 +417,9 @@ eval_step(System, Pid) ->
                         NewProc=Proc#proc{hist=NewHist,env=NewEnv,exp=NewExp},
                         System#sys{msgs = Msgs,signals=Signals,procs=[NewProc|RestProcs],trace=NewTrace};
                   false->NewHist=[{link,set_link,Env,Exp,LinkPid,Time}|Hist],
-                        NewProc=Proc#proc{hist=NewHist,env=NewEnv,links=Links++[LinkPid],exp=NewExp},
-                        NewLinkProc=LinkProc#proc{links=DestLinks++[Pid]},
-                        System#sys{msgs = Msgs,signals=Signals,procs=[NewProc|[NewLinkProc|OtherProcs]],trace=NewTrace}
+                        NewProc=Proc#proc{hist=NewHist,env=NewEnv,exp=NewExp},
+                        NewSignal = #signal{dest = LinkPid,from=Pid,type=link,time = Time},
+                        System#sys{msgs = Msgs,signals=[NewSignal|Signals],procs=[NewProc|RestProcs],trace=NewTrace}
                 end;
               false->%%if the dest in not alive
                   NewHist=[{link,error,Env,Exp,LinkPid,Time}|Hist],
@@ -530,7 +529,9 @@ eval_signal(System,Id)->
   TraceItem = #trace{type = ?RULE_SIGNAL, from = From, val = {Type,Reason},to=LinkPid, time = Time},
   NewTrace = [TraceItem|Trace],
   case utils:deliver_signal(Procs,Proc,Signal) of
-    {NewProc,NewLink}->System#sys{signals=RestSignals,procs=[NewProc|[NewLink|RestProcs]],trace=NewTrace};
+    {NewProc,NewLink}->
+      {_,OtherProcs}=utils:select_proc(RestProcs,NewLink#proc.pid),
+      System#sys{signals=RestSignals,procs=[NewProc|[NewLink|OtherProcs]],trace=NewTrace};
     NewProc->System#sys{signals=RestSignals,procs=[NewProc|RestProcs],trace=NewTrace}
   end.
 

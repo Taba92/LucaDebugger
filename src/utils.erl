@@ -204,6 +204,20 @@ deliver_signal(_,Proc,#signal{from=From,type=killer,time=Time})->
   NewExp=cerl:abstract({exit,killed}),
   NewHist=[{signal,From,killed,Env,Exp,Mail,Time}|Hist],
   Proc#proc{hist=NewHist,exp=NewExp};
+deliver_signal(Procs,Proc,#signal{from=From,type=link,time=Time})->
+   {Sender,_}=utils:select_proc(Procs,From),
+  #proc{pid=Pid,links=Links,hist=Hist,env=Env,exp=Exp}=Proc,
+  #proc{pid=From,links=SenderLinks}=Sender,
+  case lists:member(From,Links) of
+    true->%exist already semi-link, i will not set anything
+      NewHist=[{signal,link,exist,Env,Exp,From,Time}|Hist],
+      {Sender,Proc#proc{hist=NewHist}};
+    false->
+      NewHist=[{signal,link,no_exist,Env,Exp,From,Time}|Hist],
+      NewProc=Proc#proc{hist=NewHist,links=Links++[From]},
+      NewSender=Sender#proc{links=SenderLinks++[Pid]},
+      {NewProc,NewSender}
+  end;
 deliver_signal(_,Proc,#signal{from=From,type=unlink,time=Time})->
   #proc{pid=Pid,links=Links,hist=Hist,env=Env,exp=Exp}=Proc,
   case lists:member(From,Links) of
@@ -554,6 +568,8 @@ pp_hist_2({propag,_,_,_,_,HistVal}) ->
     end;
 
 pp_hist_2({signal,unlink,_,_,_,FromPid,Time}) ->
+  "got_signal(" ++ [{?CAUDER_GREEN, pp(FromPid)}] ++","++[{?wxRED, integer_to_list(Time)}]++ ")";
+pp_hist_2({signal,link,_,_,_,FromPid,Time}) ->
   "got_signal(" ++ [{?CAUDER_GREEN, pp(FromPid)}] ++","++[{?wxRED, integer_to_list(Time)}]++ ")";
 pp_hist_2({signal,FromPid,_,_,Time}) ->
   "got_signal(" ++ [{?CAUDER_GREEN, pp(FromPid)}] ++","++[{?wxRED, integer_to_list(Time)}]++")";

@@ -9,4 +9,4 @@ Extension of the debugger:
 -Error/exit.
 -Error/exit signals propagation.
 -Unlink.
--Link: The links have been implemented not entirely correct as signals would also be used in the case of link setting, instead in Cauder they are implemented in an atomic way.But for noproc error it uses correctly signal error directed to itself.
+-Link: the links use signals for creation e errors 'noproc'. But if the process receiver die during the travelling of the signal link, the signal remain in the GS. In the documentation, this signal should be converted in a erro signal with noproc reason.
